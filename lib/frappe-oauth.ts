@@ -136,7 +136,7 @@ export const frappeOAuthMetadata = {
   // /.well-known/openid-configuration 301s to an API method, and
   // Inspector's OAuth BFF rejects redirects. Serve metadata here instead.
   issuer: env.mcpPublicUrl,
-  authorization_endpoint: endpoint("/api/method/frappe.integrations.oauth2.authorize"),
+  authorization_endpoint: `${env.mcpPublicUrl}/oauth/authorize`,
   token_endpoint: endpoint("/api/method/frappe.integrations.oauth2.get_token"),
   revocation_endpoint: endpoint("/api/method/frappe.integrations.oauth2.revoke_token"),
   introspection_endpoint: endpoint("/api/method/frappe.integrations.oauth2.introspect_token"),

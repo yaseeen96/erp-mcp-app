@@ -4,6 +4,7 @@ import { mountExportDownloads } from "./lib/export-store.js";
 import { mountLandingIconRewrite } from "./lib/landing-brand.js";
 import { env } from "./lib/env.js";
 import { createFrappeOAuthProvider } from "./lib/frappe-oauth.js";
+import { mountAuthorizeProxy } from "./lib/oauth-authorize.js";
 import type { FrappeUser } from "./lib/types.js";
 import { registerPlanProjectPrompt } from "./prompts/plan-project.js";
 import { registerAttendanceReadTools } from "./tools/attendance-read.js";
@@ -40,6 +41,7 @@ mountExportDownloads(server);
 
 if (env.oauthEnabled) {
   mountFrappeClientRegistration(server);
+  mountAuthorizeProxy(server);
 }
 
 export const planProject = registerPlanProjectPrompt(server);
