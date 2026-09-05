@@ -13,10 +13,13 @@ npm run dev
 
 Open [http://localhost:3000/mcp/inspector](http://localhost:3000/mcp/inspector). Connect `http://localhost:3000/mcp`, then Authenticate.
 
-Desk → OAuth Client **ST Attendance MCP**:
+Desk → OAuth Client **ST Attendance MCP**. Redirect URIs (exact, all three):
 
-- Redirect URI (exact): `http://localhost:3000/mcp/inspector/oauth/callback`
-- Scopes: `all openid` on **one line** (space-separated)
+- `http://localhost:3000/mcp/inspector/oauth/callback`
+- `https://attendance.mcp.standardtouch.com/mcp/inspector/oauth/callback`
+- `https://inspector.manufact.com/inspector/oauth/callback`
+
+Scopes: `all openid` on **one line** (space-separated)
 
 ## Views
 
@@ -43,9 +46,7 @@ npm run build
 npm run deploy -- --name st-attendance --env-file .env
 ```
 
-After the cloud URL is known, set `MCP_PUBLIC_URL` to that origin (no trailing slash) and add the same host’s redirect URI on the Frappe OAuth Client:
-
-`https://<your-mcp-host>/mcp/inspector/oauth/callback`
+After the cloud URL is known, set `MCP_PUBLIC_URL` to that origin (no trailing slash). The hosted Inspector (`Open in Inspector`) uses `https://inspector.manufact.com/inspector/oauth/callback` — that URI must also be on the Frappe OAuth Client.
 
 Pass secrets with `--env` / `--env-file`, or `mcp-use servers env add KEY=VALUE --server <id> --sensitive`. Do not commit `.env`.
 
