@@ -13,6 +13,7 @@ function rewriteChatGptSteps(html: string): string {
           <li><strong>Enable Developer Mode:</strong> Settings \u2192 Plugins \u2192 Advanced \u2192 Developer mode</li>
           <li><strong>Add this plugin:</strong> Settings \u2192 Plugins \u2192 Browse plugins, then add: ${url}</li>
           <li><strong>Use in conversations:</strong> Choose the plugin from the Plus menu</li>
+          <li><strong>After a server update:</strong> Start a new chat. If tools look stale, turn the plugin off and on so ChatGPT reloads the tool list</li>
         </ol>
       ${close}`;
     },

@@ -1,32 +1,42 @@
 ---
 name: choose-tools
-description: Pick exactly one attendance tool from user intent. Precise asks stay narrow; vague asks get one default. Never preview a day just to export it.
+description: Route precise attendance asks to one tool. If intent is vague, ask a short question instead of calling a tool or guessing.
 ---
 
-# Choose one tool
+# Choose one tool, or ask
 
-Read the user's outcome. Call **one** tool that delivers it.
+Before any tool call, check whether the request is specified enough to act.
 
-| They said | Call | Do not also call |
+## Precise — call one tool
+
+Outcome and needed args are clear. Do not add extra tools.
+
+| They said | Call | Arguments |
 | --- | --- | --- |
-| export / PDF / Excel / download, with or without a date | `export-history` | `show-day`, `show-history`, `get-export` |
-| show / see / what did I do on a date | `show-day` | `export-history` |
-| today / am I in | `show-today` | extra get-* helpers |
-| check in / punch in | `check-in` | `add-tasks` unless they also asked to save a plan |
-| plan / research / add tasks, no check-in | `add-tasks` | `check-in`, `show-today` |
+| export / PDF / Excel / download **and** a day | `export-history` | `date=YYYY-MM-DD`, `format=pdf` or `xlsx` |
+| show / see that day | `show-day` | `date=YYYY-MM-DD` |
+| today / am I in | `show-today` | — |
+| check in / punch in | `check-in` | — |
+| plan / add tasks, no check-in | `add-tasks` | projects and tasks |
 
-## Precise
-
-“export my work for 18 august in a pdf” → one call:
+Example: “export my work for 18 august in a pdf”
 
 `export-history` `{ "date": "2026-08-18", "format": "pdf" }`
 
-A date in an export sentence is an argument, not a second job.
+`export-history` **has** `date`. Never say it does not. Never also call `show-day`.
 
-## Vague
+## Vague — ask, do not call
 
-One default. “export my work” → `export-history` `format=pdf`. “how’s today” → `show-today`.
+If see-vs-download, which day, PDF-vs-Excel, or whose day is unclear: ask **one** question with 2–4 options. Wait. Do not assume.
+
+Examples:
+
+- “export my work” → “Which day, or the recent history? PDF or Excel?”
+- “how did I do in August” → “See the history on screen, or download a file? One day or the whole month?”
+- “send me a report” → “PDF or Excel? One date or recent history?”
+
+At most two questions. After they answer, call one tool.
 
 ## Two tools
 
-Only when they asked for two outcomes: “show 18 August and also send me the PDF.”
+Only when they asked for two outcomes: “show 18 August **and** send the PDF.”

@@ -795,10 +795,16 @@ export function registerAttendanceReadTools(server: MCPServer<FrappeUser> | MCPS
   );
 
   const exportInput = z.object({
+    date: z
+      .string()
+      .optional()
+      .describe(
+        "Supported. One day as YYYY-MM-DD so the file contains only that day (18 August 2026 → 2026-08-18). Omit page when set. Never claim this tool has no date filter."
+      ),
     format: z
       .enum(["xlsx", "pdf", "both"])
       .optional()
-      .describe("pdf if they said PDF or only said export/file. xlsx if they said Excel. both only if they asked for both. Default pdf."),
+      .describe("pdf if they said PDF. xlsx if they said Excel. both only if they asked for both. If they said export but not the format, ask first."),
     topics: z
       .array(z.enum(["days", "hours", "tasks", "attendance"]))
       .optional()
@@ -806,12 +812,6 @@ export function registerAttendanceReadTools(server: MCPServer<FrappeUser> | MCPS
         "Omit for the full branded report. days=how many days worked. hours=hours and time. tasks=what they worked on. attendance=daily in/out table."
       ),
     page: z.number().int().min(0).optional().describe("0-based history page. Default 0. Ignored when date is set."),
-    date: z
-      .string()
-      .optional()
-      .describe(
-        "One day as YYYY-MM-DD. Use this when they want only that date (e.g. 18 August 2026 → 2026-08-18). Omit page."
-      ),
   });
   const exportOutput = z.object({
     summary: z.string(),
@@ -884,9 +884,9 @@ export function registerAttendanceReadTools(server: MCPServer<FrappeUser> | MCPS
   const exportHistory = server.tool(
     {
       name: "export-history",
-      title: "Export history",
+      title: "Export PDF or Excel",
       description:
-        "The only tool for a PDF or Excel file. Call this once and do not also call show-day, show-history, or get-export. Named day → date=YYYY-MM-DD (file is only that day). They said PDF or just export → format=pdf. Excel → format=xlsx. Omit topics unless they named a slice.",
+        "Download a PDF or Excel file. Supports date (YYYY-MM-DD) for a single-day file — this tool does have a date filter. Call once. Do not also call show-day, show-history, or get-export. If they named a day, pass date and omit page. If they said PDF, format=pdf. If they said Excel, format=xlsx. If they said export but not which day or which format, ask instead of guessing.",
       inputSchema: exportInput,
       outputSchema: exportOutput,
       view: {
