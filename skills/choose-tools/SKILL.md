@@ -14,6 +14,7 @@ Outcome and needed args are clear. Do not add extra tools.
 | They said | Call | Arguments |
 | --- | --- | --- |
 | export / PDF / Excel / download **and** a day | `export-history` | `date=YYYY-MM-DD`, `format=pdf` or `xlsx` |
+| export a range (18–19 Aug, last week) | `export-history` | `from` and `to`, `format=pdf` or `xlsx` |
 | show / see that day | `show-day` | `date=YYYY-MM-DD` |
 | today / am I in | `show-today` | — |
 | check in / punch in | `check-in` | — |
@@ -23,7 +24,15 @@ Example: “export my work for 18 august in a pdf”
 
 `export-history` `{ "date": "2026-08-18", "format": "pdf" }`
 
-`export-history` **has** `date`. Never say it does not. Never also call `show-day`.
+“export 18 and 19 August as PDF”
+
+`export-history` `{ "from": "2026-08-18", "to": "2026-08-19", "format": "pdf" }`
+
+“export 18 and 19 August as Excel”
+
+`export-history` `{ "from": "2026-08-18", "to": "2026-08-19", "format": "xlsx" }`
+
+One file per format. Same `from`/`to` for Excel and PDF. Do not call the tool twice and merge. Never say Excel or PDF only supports one day. Never also call `show-day`.
 
 ## Vague — ask, do not call
 

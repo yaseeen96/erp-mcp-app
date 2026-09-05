@@ -799,19 +799,27 @@ export function registerAttendanceReadTools(server: MCPServer<FrappeUser> | MCPS
       .string()
       .optional()
       .describe(
-        "Supported. One day as YYYY-MM-DD so the file contains only that day (18 August 2026 → 2026-08-18). Omit page when set. Never claim this tool has no date filter."
+        "One day as YYYY-MM-DD (18 August 2026 → 2026-08-18). For several days use from and to instead. Never claim this tool has no date filter."
       ),
+    from: z
+      .string()
+      .optional()
+      .describe("Range start YYYY-MM-DD, inclusive. Use with to. 18–19 August 2026 → from=2026-08-18."),
+    to: z
+      .string()
+      .optional()
+      .describe("Range end YYYY-MM-DD, inclusive. Use with from. 18–19 August 2026 → to=2026-08-19."),
     format: z
       .enum(["xlsx", "pdf", "both"])
       .optional()
-      .describe("pdf if they said PDF. xlsx if they said Excel. both only if they asked for both. If they said export but not the format, ask first."),
+      .describe("xlsx and pdf both honor date/from/to. pdf if they said PDF. xlsx if they said Excel. both if they asked for both. If they said export but not the format, ask first."),
     topics: z
       .array(z.enum(["days", "hours", "tasks", "attendance"]))
       .optional()
       .describe(
         "Omit for the full branded report. days=how many days worked. hours=hours and time. tasks=what they worked on. attendance=daily in/out table."
       ),
-    page: z.number().int().min(0).optional().describe("0-based history page. Default 0. Ignored when date is set."),
+    page: z.number().int().min(0).optional().describe("0-based history page. Default 0. Ignored when date, from, or to is set."),
   });
   const exportOutput = z.object({
     summary: z.string(),
@@ -830,16 +838,20 @@ export function registerAttendanceReadTools(server: MCPServer<FrappeUser> | MCPS
     topics: Array<"days" | "hours" | "tasks" | "attendance"> | undefined,
     page: number | undefined,
     date: string | undefined,
+    from: string | undefined,
+    to: string | undefined,
     ctx: unknown
   ) {
-    const data = await loadHistoryExport(ctx as AttendanceCtx, { page, date });
+    const data = await loadHistoryExport(ctx as AttendanceCtx, { page, date, from, to });
     const wanted = format ?? "pdf";
     const built = await Promise.all([
       ...(wanted === "pdf" ? [] : [buildHistoryExcel(data.employeeName, data.days, topics)]),
       ...(wanted === "xlsx" ? [] : [buildHistoryPdf(data.employeeName, data.days, topics)]),
     ]);
     const files = built.map(storeExportFile);
-    const scope = date ? ` for ${date}` : "";
+    const start = from || date;
+    const end = to || date;
+    const scope = start && end ? (start === end ? ` for ${start}` : ` for ${start} to ${end}`) : "";
     return {
       content: [
         {
@@ -872,9 +884,9 @@ export function registerAttendanceReadTools(server: MCPServer<FrappeUser> | MCPS
       outputSchema: exportOutput,
       annotations: { readOnlyHint: true, destructiveHint: false, openWorldHint: true },
     },
-    async ({ format, topics, page, date }, ctx) => {
+    async ({ format, topics, page, date, from, to }, ctx) => {
       try {
-        return await runExport(format, topics, page, date, ctx);
+        return await runExport(format, topics, page, date, from, to, ctx);
       } catch (error) {
         return frappeFailure(error);
       }
@@ -886,20 +898,14 @@ export function registerAttendanceReadTools(server: MCPServer<FrappeUser> | MCPS
       name: "export-history",
       title: "Export PDF or Excel",
       description:
-        "Download a PDF or Excel file. Supports date (YYYY-MM-DD) for a single-day file — this tool does have a date filter. Call once. Do not also call show-day, show-history, or get-export. If they named a day, pass date and omit page. If they said PDF, format=pdf. If they said Excel, format=xlsx. If they said export but not which day or which format, ask instead of guessing.",
+        "Download one PDF and/or one Excel. date, from, and to apply to both formats. One day → date. Several days → from and to in one file (18–19 August Excel → from=2026-08-18, to=2026-08-19, format=xlsx). Call once. Do not export days separately or say Excel has no range. PDF → format=pdf. Excel → format=xlsx. Both files → format=both. If they said export but not which days or which format, ask instead of guessing.",
       inputSchema: exportInput,
       outputSchema: exportOutput,
-      view: {
-        name: "export-history",
-        description: "Download Excel and PDF attendance files",
-        prefersBorder: false,
-        csp: viewCsp,
-      },
       annotations: { readOnlyHint: true, destructiveHint: false, openWorldHint: true },
     },
-    async ({ format, topics, page, date }, ctx) => {
+    async ({ format, topics, page, date, from, to }, ctx) => {
       try {
-        return await runExport(format, topics, page, date, ctx);
+        return await runExport(format, topics, page, date, from, to, ctx);
       } catch (error) {
         return frappeFailure(error);
       }

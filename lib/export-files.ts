@@ -546,8 +546,14 @@ function safeFilePart(value: string): string {
 }
 
 function reportFileDate(stats: ReportStats) {
-  if (stats.firstDate === stats.lastDate && /^\d{4}-\d{2}-\d{2}$/.test(stats.firstDate)) {
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(stats.firstDate)) {
+    return undefined;
+  }
+  if (stats.firstDate === stats.lastDate) {
     return stats.firstDate;
+  }
+  if (/^\d{4}-\d{2}-\d{2}$/.test(stats.lastDate)) {
+    return `${stats.firstDate}_to_${stats.lastDate}`;
   }
   return undefined;
 }
@@ -560,7 +566,7 @@ export function exportFileName(
   reportDate?: string
 ): string {
   const when =
-    reportDate && /^\d{4}-\d{2}-\d{2}$/.test(reportDate)
+    reportDate && /^\d{4}-\d{2}-\d{2}(?:_to_\d{4}-\d{2}-\d{2})?$/.test(reportDate)
       ? reportDate
       : new Intl.DateTimeFormat("en-CA", {
           timeZone: "Asia/Kolkata",

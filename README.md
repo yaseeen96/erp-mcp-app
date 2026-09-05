@@ -34,7 +34,7 @@ Scopes: `all openid`
 | `show-projects` | Project groups |
 | `show-recurring` | Recurring templates |
 | `show-additional-work` | Extra hours |
-| `export-history` | Excel / PDF download (optional `date` for one day) |
+| `export-history` | Excel / PDF (`date` for one day, `from`+`to` for a range) |
 
 Writes: `add-tasks` saves projects and tasks without punching in. `check-in` starts the day and sends planned work. `check-out` finishes the day. Destructive tools need `confirm=true`.
 
