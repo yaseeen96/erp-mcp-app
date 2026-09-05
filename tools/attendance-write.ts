@@ -2,6 +2,16 @@ import type { MCPServer } from "mcp-use";
 import { z } from "zod";
 import * as attendance from "../lib/attendance.js";
 import { fail, ok } from "../lib/result.js";
+import { stringValue } from "../lib/summaries.js";
+import {
+  addDrafts,
+  attendanceDate,
+  listDrafts,
+  mergePlannedTasks,
+  plannedSnapshot,
+  projectNamesFromDrafts,
+  takeDrafts,
+} from "../lib/task-drafts.js";
 import { frappeFailure } from "../lib/tool-utils.js";
 import type { AttendanceCtx, FrappeUser } from "../lib/types.js";
 
@@ -53,10 +63,6 @@ function flattenProjectsAndTasks(args: {
   return [...fromProjects, ...fromTasks];
 }
 
-function projectNamesFromTasks(tasks: attendance.PlannedTaskInput[]) {
-  return [...new Set(tasks.map((task) => task.project_name?.trim()).filter(Boolean))] as string[];
-}
-
 const carriedUpdate = z.object({
   name: z.string().describe("Task Entry name"),
   description: z.string().optional(),
@@ -97,7 +103,7 @@ export function registerAttendanceWriteTools(server: MCPServer<FrappeUser> | MCP
       name: "check-in",
       title: "Check in",
       description:
-        "Start the day. One call can include several projects and many tasks. Do not also call add-tasks. WFH needs an Attendance Request except Saturday/hybrid routine days.",
+        "Punch in for today. Call this immediately when they say check in, start the day, or punch in — planning is optional. Pass any projects/tasks they named. Also includes work already saved with add-tasks. Do not also call add-tasks. WFH needs an Attendance Request except Saturday/hybrid routine days.",
       inputSchema: z.object({
         projects: z
           .array(projectGroup)
@@ -123,18 +129,32 @@ export function registerAttendanceWriteTools(server: MCPServer<FrappeUser> | MCP
     },
     async (args, ctx) => {
       try {
-        const new_tasks = flattenProjectsAndTasks({
-          projects: args.projects,
-          tasks: args.new_tasks,
-        });
-        const result = await attendance.submitMorningLog(ctx as AttendanceCtx, {
+        const attendanceCtx = ctx as AttendanceCtx;
+        const page = await attendance.getPageState(attendanceCtx);
+        if (page.eod_done === true || page.eod_done === 1) {
+          return fail("Already checked out today.");
+        }
+        if (page.morning_done === true || page.morning_done === 1) {
+          return fail("Already checked in. Add more work with add-tasks (saved for check-out) or call check-out.");
+        }
+        const date = attendanceDate(stringValue(page.date));
+        const staged = listDrafts(attendanceCtx, date, "morning");
+        const new_tasks = mergePlannedTasks(
+          staged,
+          flattenProjectsAndTasks({
+            projects: args.projects,
+            tasks: args.new_tasks,
+          })
+        );
+        const result = await attendance.submitMorningLog(attendanceCtx, {
           ...args,
           new_tasks,
         });
+        takeDrafts(attendanceCtx, date, "morning");
         const loginTime = typeof result.login_time === "string" ? result.login_time : undefined;
-        const names = projectNamesFromTasks(new_tasks);
+        const names = projectNamesFromDrafts(new_tasks);
         return ok(
-          `Checked in${loginTime ? ` at ${loginTime}` : ""} with ${new_tasks.length} task${new_tasks.length === 1 ? "" : "s"}${names.length ? ` across ${names.length} project${names.length === 1 ? "" : "s"}` : ""}.`,
+          `Checked in${loginTime ? ` at ${loginTime}` : ""} with ${new_tasks.length} task${new_tasks.length === 1 ? "" : "s"}${names.length ? ` across ${names.length} project${names.length === 1 ? "" : "s"} (${names.join(", ")})` : ""}.`,
           {
             success: true,
             loginTime,
@@ -151,7 +171,7 @@ export function registerAttendanceWriteTools(server: MCPServer<FrappeUser> | MCP
       name: "check-out",
       title: "Check out",
       description:
-        "Finish the day: lunch, task updates, and any extra projects/tasks in this one call. Do not also call add-tasks.",
+        "Finish the day: lunch, task updates, and any extra projects/tasks in this one call. Includes extras already saved with add-tasks after check-in. Do not also call add-tasks.",
       inputSchema: z.object({
         lunch_from: z.string().describe("Lunch start time, e.g. 13:00"),
         lunch_to: z.string().describe("Lunch end time, e.g. 13:30"),
@@ -179,16 +199,22 @@ export function registerAttendanceWriteTools(server: MCPServer<FrappeUser> | MCP
     },
     async (args, ctx) => {
       try {
-        const result = await attendance.submitEodLog(ctx as AttendanceCtx, {
+        const attendanceCtx = ctx as AttendanceCtx;
+        const page = await attendance.getPageState(attendanceCtx);
+        const date = attendanceDate(stringValue(page.date));
+        const staged = listDrafts(attendanceCtx, date, "eod");
+        const adhoc_tasks = mergePlannedTasks(staged, [
+          ...flattenProjectsAndTasks({ projects: args.projects }),
+          ...(args.adhoc_tasks ?? []),
+        ]);
+        const result = await attendance.submitEodLog(attendanceCtx, {
           lunch_from: args.lunch_from,
           lunch_to: args.lunch_to,
           logout_time: args.logout_time ?? "",
           task_updates: args.task_updates,
-          adhoc_tasks: [
-            ...flattenProjectsAndTasks({ projects: args.projects }),
-            ...(args.adhoc_tasks ?? []),
-          ],
+          adhoc_tasks,
         });
+        takeDrafts(attendanceCtx, date, "eod");
         const netHours = typeof result.net_hours === "string" ? result.net_hours : undefined;
         const logoutTime = typeof result.logout_time === "string" ? result.logout_time : undefined;
         const pendingCount = typeof result.pending_count === "number" ? result.pending_count : undefined;
@@ -353,7 +379,7 @@ export function registerAttendanceWriteTools(server: MCPServer<FrappeUser> | MCP
       name: "add-tasks",
       title: "Add tasks",
       description:
-        "Create one or many projects and their tasks in a single call (projects: [{ name, tasks }]). If not checked in yet, this also checks in — do not also call check-in. If already checked in, call check-out with projects instead.",
+        "Save one or many projects and their tasks without checking in. When they asked you to research or plan a product, search the web and talk it through first, then call this with the real task list — not a placeholder. Multiple calls merge. When they later say check in, call check-in — not this tool. If already checked in, these wait for check-out.",
       inputSchema: z.object({
         projects: z
           .array(projectGroup)
@@ -367,8 +393,6 @@ export function registerAttendanceWriteTools(server: MCPServer<FrappeUser> | MCP
           .array(plannedTask)
           .optional()
           .describe("Flat task list. Use projects when creating more than one project."),
-        work_location: z.enum(["Office", "WFH", "Remote"]).optional(),
-        half_day_session: z.enum(["First Half", "Second Half"]).optional(),
       }),
       outputSchema: z.object({
         success: z.boolean(),
@@ -377,43 +401,52 @@ export function registerAttendanceWriteTools(server: MCPServer<FrappeUser> | MCP
         projectCount: z.number(),
         projectNames: z.array(z.string()),
         projectName: z.string().optional(),
-        loginTime: z.string().optional(),
+        queuedFor: z.enum(["check-in", "check-out"]),
+        tasks: z.array(
+          z.object({
+            description: z.string(),
+            estimated_time: z.string().optional(),
+            project_name: z.string().optional(),
+          })
+        ),
       }),
       annotations: { readOnlyHint: false, destructiveHint: false, openWorldHint: true },
     },
     async (args, ctx) => {
       try {
-        const page = await attendance.getPageState(ctx as AttendanceCtx);
-        const tasks = flattenProjectsAndTasks(args);
-        if (tasks.length === 0) {
+        const attendanceCtx = ctx as AttendanceCtx;
+        const page = await attendance.getPageState(attendanceCtx);
+        const incoming = flattenProjectsAndTasks(args);
+        if (incoming.length === 0) {
           return fail("Add at least one task, either under projects or in tasks.");
         }
-        const names = projectNamesFromTasks(tasks);
         if (page.eod_done === true || page.eod_done === 1) {
           return fail("Already checked out today. Extra work goes in save-additional-work or tomorrow's check-in.");
         }
-        if (page.morning_done === true || page.morning_done === 1) {
-          return fail(
-            `Already checked in. ST Attendance cannot add mid-day planned tasks. Call check-out once with projects or adhoc_tasks: ${JSON.stringify(tasks)}.`
-          );
-        }
-        const result = await attendance.submitMorningLog(ctx as AttendanceCtx, {
-          new_tasks: tasks,
-          work_location: args.work_location,
-          half_day_session: args.half_day_session,
-        });
-        const loginTime = typeof result.login_time === "string" ? result.login_time : undefined;
+        const date = attendanceDate(stringValue(page.date));
+        const queuedFor: "check-in" | "check-out" =
+          page.morning_done === true || page.morning_done === 1 ? "check-out" : "check-in";
+        const staged = addDrafts(attendanceCtx, date, queuedFor === "check-out" ? "eod" : "morning", incoming);
+        const snapshot = plannedSnapshot(staged);
+        const data = {
+          success: true,
+          checkedIn: false,
+          count: snapshot.count,
+          projectCount: snapshot.projectNames.length,
+          projectNames: snapshot.projectNames,
+          projectName: snapshot.projectNames.length === 1 ? snapshot.projectNames[0] : undefined,
+          queuedFor,
+          tasks: snapshot.tasks,
+        };
         return ok(
-          `Checked in with ${tasks.length} task${tasks.length === 1 ? "" : "s"} across ${names.length || 0} project${names.length === 1 ? "" : "s"}${names.length ? ` (${names.join(", ")})` : ""}${loginTime ? ` at ${loginTime}` : ""}.`,
-          {
-            success: true,
-            checkedIn: true,
-            count: tasks.length,
-            projectCount: names.length,
-            projectNames: names,
-            projectName: names.length === 1 ? names[0] : undefined,
-            loginTime,
-          }
+          `Saved ${incoming.length} task${incoming.length === 1 ? "" : "s"} for ${snapshot.projectNames.length || 0} project${
+            snapshot.projectNames.length === 1 ? "" : "s"
+          }${snapshot.projectNames.length ? ` (${snapshot.projectNames.join(", ")})` : ""}. ${
+            queuedFor === "check-in"
+              ? "Not checked in. Call check-in when they ask to start the day."
+              : "Already checked in — these go out with check-out."
+          }`,
+          data
         );
       } catch (error) {
         return frappeFailure(error);

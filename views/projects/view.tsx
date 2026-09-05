@@ -152,8 +152,8 @@ export default function ProjectsView() {
       <Card title="Add project and tasks">
         <p className={tw.sub}>
           {output?.morningDone
-            ? "Already checked in. Extra projects go out with Submit EOD on Today, or call check-out with projects."
-            : "One call can create several projects, each with its own tasks, and check you in."}
+            ? "Already checked in. Extra projects stay planned and go out with Submit EOD / check-out."
+            : "Saves projects and tasks without checking in. Check in later when you are ready."}
         </p>
         <div className={`${tw.form} mt-3`}>
           <TaskDraftEditor
@@ -162,7 +162,7 @@ export default function ProjectsView() {
             onProjects={setDraftProjects}
             onLoose={setLoose}
           />
-          {!output?.morningDone ? (
+          {!output?.eodDone ? (
             <button
               type="button"
               className={tw.btnPrimary}
@@ -186,7 +186,7 @@ export default function ProjectsView() {
                   .catch((error: Error) => setActionError(error.message));
               }}
             >
-              {addTasks.isPending ? "Saving…" : "Add projects and check in"}
+              {addTasks.isPending ? "Saving…" : "Save planned work"}
             </button>
           ) : null}
         </div>

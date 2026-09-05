@@ -1,7 +1,6 @@
-import { ModelContext, useCallTool, useOpenExternal, useToolContext, useViewState } from "mcp-use/react";
+import { ModelContext, useCallTool, useToolContext, useViewState } from "mcp-use/react";
 import { useState } from "react";
 import { GroupedBar, SmartHoursChart } from "../_shared/charts.js";
-import { saveExportedFile } from "../_shared/download.js";
 import { TopicBar, wantsTopic } from "../_shared/topics.js";
 import {
   AppShell,
@@ -22,15 +21,12 @@ const historyTopics = ["days", "hours", "tasks", "attendance"] as const;
 export default function HistoryView() {
   const view = useToolContext<"show-history">();
   const historyTool = useCallTool("get-history");
-  const exportTool = useCallTool("get-export");
-  const openExternal = useOpenExternal();
   const [state, setState] = useViewState({
     page: view.toolInput?.page ?? 0,
     date: "",
     topics: view.toolInput?.topics ?? [],
   });
   const [selectedDate, setSelectedDate] = useState(state.date);
-  const [exportError, setExportError] = useState("");
   const topics = state.topics.length ? state.topics : undefined;
   const showHours = wantsTopic(topics, "hours") || wantsTopic(topics, "days");
   const showTasks = wantsTopic(topics, "tasks");
@@ -100,46 +96,6 @@ export default function HistoryView() {
             }}
           >
             Older
-          </button>
-          <button
-            type="button"
-            className={tw.btn}
-            disabled={exportTool.isPending}
-            onClick={() => {
-              setExportError("");
-              void exportTool
-                .callTool({ format: "xlsx", page: state.page, topics })
-                .then(async (result) => {
-                  for (const file of result.structuredContent.files) {
-                    await saveExportedFile(file, openExternal);
-                  }
-                })
-                .catch((error: unknown) => {
-                  setExportError(error instanceof Error ? error.message : "Excel export failed.");
-                });
-            }}
-          >
-            {exportTool.isPending ? "Exporting…" : "Excel"}
-          </button>
-          <button
-            type="button"
-            className={tw.btn}
-            disabled={exportTool.isPending}
-            onClick={() => {
-              setExportError("");
-              void exportTool
-                .callTool({ format: "pdf", page: state.page, topics })
-                .then(async (result) => {
-                  for (const file of result.structuredContent.files) {
-                    await saveExportedFile(file, openExternal);
-                  }
-                })
-                .catch((error: unknown) => {
-                  setExportError(error instanceof Error ? error.message : "PDF export failed.");
-                });
-            }}
-          >
-            PDF
           </button>
           <SiteLink path="/my-history" label="Open ERPNext" />
         </div>
@@ -243,8 +199,6 @@ export default function HistoryView() {
           )}
         </Card>
       ) : null}
-      {exportTool.error ? <ErrorState message={exportTool.error.message} /> : null}
-      {exportError ? <ErrorState message={exportError} /> : null}
     </AppShell>
   );
 }

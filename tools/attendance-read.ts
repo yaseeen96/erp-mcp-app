@@ -7,6 +7,7 @@ import { loadHistoryPage } from "../lib/history-data.js";
 import { loadProjects } from "../lib/projects.js";
 import { resolveWorkLocationConfig } from "../lib/work-location.js";
 import { ok } from "../lib/result.js";
+import { attendanceDate, listDrafts, plannedSnapshot } from "../lib/task-drafts.js";
 import { frappeFailure } from "../lib/tool-utils.js";
 import type { AttendanceCtx, FrappeUser } from "../lib/types.js";
 import {
@@ -17,6 +18,7 @@ import {
   summarizeManagement,
   summarizeRecurring,
   summarizeTeam,
+  stringValue,
   summarizeToday,
   tasksFromDetail,
 } from "../lib/summaries.js";
@@ -51,6 +53,17 @@ const todayOutput = z.object({
     options: z.array(z.enum(["Office", "WFH", "Remote"])),
     readonly: z.boolean(),
     note: z.string(),
+  }),
+  planned: z.object({
+    count: z.number(),
+    projectNames: z.array(z.string()),
+    tasks: z.array(
+      z.object({
+        description: z.string(),
+        estimated_time: z.string().optional(),
+        project_name: z.string().optional(),
+      })
+    ),
   }),
 });
 
@@ -292,6 +305,20 @@ const viewCsp = {
   resourceDomains: ["https://fonts.googleapis.com", "https://fonts.gstatic.com"],
 };
 
+async function loadToday(ctx: AttendanceCtx) {
+  const page = await attendance.getPageState(ctx);
+  const planned = plannedSnapshot(listDrafts(ctx, attendanceDate(stringValue(page.date))));
+  const data = {
+    ...summarizeToday(page),
+    workLocation: await resolveWorkLocationConfig(ctx, page),
+    planned,
+  };
+  if (!data.morningDone && planned.count) {
+    data.summary = `${data.summary} · ${planned.count} planned`;
+  }
+  return ok(data.summary, data, { page });
+}
+
 export function registerAttendanceReadTools(server: MCPServer<FrappeUser> | MCPServer) {
   const getToday = server.tool(
     {
@@ -305,12 +332,7 @@ export function registerAttendanceReadTools(server: MCPServer<FrappeUser> | MCPS
     },
     async (_args, ctx) => {
       try {
-        const page = await attendance.getPageState(ctx as AttendanceCtx);
-        const data = {
-          ...summarizeToday(page),
-          workLocation: await resolveWorkLocationConfig(ctx as AttendanceCtx, page),
-        };
-        return ok(data.summary, data, { page });
+        return await loadToday(ctx as AttendanceCtx);
       } catch (error) {
         return frappeFailure(error);
       }
@@ -510,7 +532,7 @@ export function registerAttendanceReadTools(server: MCPServer<FrappeUser> | MCPS
       name: "show-today",
       title: "Show today",
       description:
-        "Today's status, tasks, projects, and check-in/EOD workspace. One call is enough — do not also call get-today or show-projects for today's work. Omit topics for the full workspace.",
+        "Today's status, submitted tasks, and planned (not yet punched) work. Does not add tasks or check in. To save projects/tasks without punching, call add-tasks. To punch, call check-in only when they asked. One call is enough — do not also call get-today or show-projects. Omit topics for the full workspace.",
       inputSchema: z.object({
         topics: todayTopics,
       }),
@@ -525,12 +547,7 @@ export function registerAttendanceReadTools(server: MCPServer<FrappeUser> | MCPS
     },
     async (_args, ctx) => {
       try {
-        const page = await attendance.getPageState(ctx as AttendanceCtx);
-        const data = {
-          ...summarizeToday(page),
-          workLocation: await resolveWorkLocationConfig(ctx as AttendanceCtx, page),
-        };
-        return ok(data.summary, data, { page });
+        return await loadToday(ctx as AttendanceCtx);
       } catch (error) {
         return frappeFailure(error);
       }
@@ -754,7 +771,7 @@ export function registerAttendanceReadTools(server: MCPServer<FrappeUser> | MCPS
       name: "show-projects",
       title: "Show projects",
       description:
-        "All known project names (today, recurring, extra work). For today's projects only, show-today is enough. Do not also call list-projects. To create projects, call add-tasks once — not this tool.",
+        "All known project names (today, planned, recurring, extra work). For today's projects only, show-today is enough. Do not also call list-projects. To create projects without checking in, call add-tasks — not this tool.",
       inputSchema: z.object({
         topics: projectTopics,
       }),

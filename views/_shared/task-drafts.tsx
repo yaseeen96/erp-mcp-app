@@ -52,6 +52,34 @@ export function toProjectGroups(projects: DraftProject[]) {
     .filter((project) => project.name && project.tasks.length);
 }
 
+export function fromPlannedTasks(tasks: PlannedDraft[]): { projects: DraftProject[]; loose: DraftTask[] } {
+  const groups = new Map<string, DraftTask[]>();
+  const loose: DraftTask[] = [];
+  for (const task of tasks) {
+    const row: DraftTask = {
+      key: draftKey("t"),
+      description: task.description,
+      estimate: task.estimated_time ?? "",
+    };
+    const project = task.project_name?.trim();
+    if (project) {
+      const list = groups.get(project) ?? [];
+      list.push(row);
+      groups.set(project, list);
+    } else {
+      loose.push(row);
+    }
+  }
+  return {
+    projects: [...groups.entries()].map(([name, projectTasks]) => ({
+      key: draftKey("p"),
+      name,
+      tasks: projectTasks,
+    })),
+    loose,
+  };
+}
+
 export function flattenPlanned(projects: DraftProject[], loose: DraftTask[]): PlannedDraft[] {
   return [
     ...projects.flatMap((project) =>

@@ -4,11 +4,12 @@ import {
   useToolContext,
   useViewState,
 } from "mcp-use/react";
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { StatusDonut } from "../_shared/charts.js";
 import {
   emptyTask,
   flattenPlanned,
+  fromPlannedTasks,
   TaskDraftEditor,
   toProjectGroups,
   type DraftProject,
@@ -66,6 +67,18 @@ export default function TodayView() {
   );
   const [updates, setUpdates] = useState(taskUpdates);
   const shownUpdates = updates.length === taskUpdates.length ? updates : taskUpdates;
+  const planned = output?.planned;
+
+  useEffect(() => {
+    const next = fromPlannedTasks(planned?.tasks ?? []);
+    if (output?.morningDone) {
+      setAdhocProjects(next.projects);
+      setAdhocLoose(next.loose);
+      return;
+    }
+    setProjects(next.projects);
+    setLooseTasks(next.loose.length ? next.loose : [emptyTask()]);
+  }, [output?.date, output?.morningDone, planned?.count, planned?.tasks]);
 
   if (view.status === "pending" && !output) {
     return (
@@ -114,7 +127,9 @@ export default function TodayView() {
       <ModelContext
         content={`Today ${output?.date ?? ""}: ${output?.employeeName ?? ""} ${
           eodDone ? "checked out" : morningDone ? "checked in" : "not checked in"
-        }. Tasks ${output?.taskCounts.done ?? 0}/${output?.taskCounts.total ?? 0}.`}
+        }. Tasks ${output?.taskCounts.done ?? 0}/${output?.taskCounts.total ?? 0}. Planned ${
+          planned?.count ?? 0
+        }${planned?.projectNames.length ? ` (${planned.projectNames.join(", ")})` : ""}.`}
       />
       <div className={tw.kpis}>
         <Kpi label="Date" value={output?.date ?? "—"} />
@@ -126,6 +141,7 @@ export default function TodayView() {
             value={`${output?.taskCounts.done ?? 0}/${output?.taskCounts.total ?? 0}`}
           />
         ) : null}
+        {!morningDone && planned?.count ? <Kpi label="Planned" value={planned.count} /> : null}
       </div>
       <div className={tw.actions}>
         <Pill tone={eodDone ? "good" : morningDone ? "info" : "warn"}>
@@ -147,7 +163,11 @@ export default function TodayView() {
       {showTasks ? (
         <Card title="Tasks">
           {tasks.length === 0 ? (
-            <p className={tw.empty}>No tasks yet. Add one before check-in.</p>
+            <p className={tw.empty}>
+              {planned?.count
+                ? `${planned.count} planned task${planned.count === 1 ? "" : "s"} — check in to send them to ERPNext.`
+                : "No tasks yet. Add projects and tasks, then check in when you are ready."}
+            </p>
           ) : (
             <table className={tw.table}>
               <thead>
@@ -176,9 +196,11 @@ export default function TodayView() {
       ) : null}
 
       {!morningDone ? (
-        <Card title="Morning check-in">
+        <Card title={planned?.count ? "Planned work" : "Morning check-in"}>
           <div className={tw.form}>
-          <p className={tw.sub}>Add projects and as many tasks as you need. Check-in sends them in one call.</p>
+          <p className={tw.sub}>
+            Add projects and tasks here. They stay planned until you press Check in.
+          </p>
           <TaskDraftEditor
             projects={projects}
             loose={looseTasks}

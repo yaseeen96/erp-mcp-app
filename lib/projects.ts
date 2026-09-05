@@ -1,5 +1,6 @@
 import * as attendance from "./attendance.js";
 import { asArray, asRecord, boolValue, stringValue } from "./summaries.js";
+import { attendanceDate, listDrafts } from "./task-drafts.js";
 import type { AttendanceCtx, JsonRecord } from "./types.js";
 
 export type ProjectTask = {
@@ -55,7 +56,12 @@ function taskFromRecord(row: JsonRecord): ProjectTask {
   };
 }
 
-export function summarizeProjects(page: JsonRecord, recurring: unknown[], extra: JsonRecord) {
+export function summarizeProjects(
+  page: JsonRecord,
+  recurring: unknown[],
+  extra: JsonRecord,
+  planned: Array<{ description: string; estimated_time?: string; project_name?: string }> = []
+) {
   const map = new Map<string, ProjectRow>();
 
   for (const row of asArray(page.tasks)) {
@@ -64,6 +70,16 @@ export function summarizeProjects(page: JsonRecord, recurring: unknown[], extra:
       continue;
     }
     addName(map, task.project_name, "today", taskFromRecord(task));
+  }
+
+  for (const task of planned) {
+    addName(map, task.project_name, "planned", {
+      name: "",
+      description: task.description,
+      status: "Planned",
+      estimate: task.estimated_time ?? "",
+      actualTime: "",
+    });
   }
 
   for (const row of recurring) {
@@ -97,7 +113,9 @@ export function summarizeProjects(page: JsonRecord, recurring: unknown[], extra:
 
   return {
     summary: projects.length
-      ? `${projects.length} projects. ${projects.filter((row) => row.todayCount).length} have tasks today.`
+      ? `${projects.length} projects. ${projects.filter((row) => row.todayCount).length} have tasks today${
+          planned.length ? `. ${planned.length} planned` : ""
+        }.`
       : "No projects yet. Add one and put tasks on it.",
     date: stringValue(page.date),
     morningDone: boolValue(page.morning_done),
@@ -115,6 +133,6 @@ export async function loadProjects(ctx: AttendanceCtx) {
   ]);
   return {
     page,
-    data: summarizeProjects(page, recurring, extra),
+    data: summarizeProjects(page, recurring, extra, listDrafts(ctx, attendanceDate(stringValue(page.date)))),
   };
 }

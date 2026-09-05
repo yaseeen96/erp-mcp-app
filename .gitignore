@@ -35,6 +35,9 @@ yarn-error.log*
 Thumbs.db
 *.pem
 
+# Local runtime data
+data/
+
 # Local reference checkouts (not used at build or runtime)
 references/mcp/
 references/st_attendance_tracker/
