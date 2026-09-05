@@ -5,7 +5,7 @@ import {
   useViewState,
 } from "mcp-use/react";
 import { useMemo, useState } from "react";
-import { HoursBar, StatusDonut } from "../_shared/charts.js";
+import { StatusDonut } from "../_shared/charts.js";
 import {
   emptyTask,
   flattenPlanned,
@@ -135,26 +135,13 @@ export default function TodayView() {
         {output?.isTeamLeader ? <Pill>Team Leader</Pill> : null}
       </div>
 
-      {showHours || showTasks ? (
-        <div className={tw.grid}>
-          {showTasks ? (
-            <Card title="Task mix">
-              <StatusDonut
-                labels={output?.chart.labels ?? []}
-                values={output?.chart.values ?? []}
-              />
-            </Card>
-          ) : null}
-          {showHours ? (
-            <Card title="Hours proxy">
-              <HoursBar
-                labels={["Done", "Open", "Carried"]}
-                values={output?.chart.values ?? []}
-                label="Count"
-              />
-            </Card>
-          ) : null}
-        </div>
+      {showTasks ? (
+        <Card title="Task mix">
+          <StatusDonut
+            labels={output?.chart.labels ?? []}
+            values={output?.chart.values ?? []}
+          />
+        </Card>
       ) : null}
 
       {showTasks ? (

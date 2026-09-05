@@ -93,18 +93,24 @@ export function summarizeTeam(board: JsonRecord) {
   const missing = numberValue(summary.missing);
   const onLeave = numberValue(summary.on_leave);
   const eodDone = numberValue(summary.eod_done);
-  const hours = employees.map((row) => {
+  const people = employees.map((row) => {
     const employee = asRecord(row) ?? {};
     return {
+      employeeId: stringValue(employee.name),
       name: stringValue(employee.employee_name, stringValue(employee.name)),
-      hours: parseHours(employee.net_hours),
+      designation: stringValue(employee.designation),
+      department: stringValue(employee.department),
       status: stringValue(employee.status, "missing"),
-      isLate: boolValue(employee.is_late),
+      login: stringValue(employee.login_time),
+      logout: stringValue(employee.logout_time),
+      hours: parseHours(employee.net_hours),
+      done: numberValue(employee.done_tasks),
+      total: numberValue(employee.total_tasks),
     };
   });
 
   return {
-    summary: `Team ${stringValue(board.date)}: ${checkedIn} in, ${late} late, ${missing} missing, ${onLeave} on leave, ${eodDone} EOD.`,
+    summary: `Team ${stringValue(board.date)}: ${people.map((row) => row.name).join(", ") || "no reports"}. ${checkedIn} in, ${late} late, ${missing} missing, ${onLeave} on leave, ${eodDone} EOD.`,
     date: stringValue(board.date),
     kpis: {
       total: numberValue(summary.total, employees.length),
@@ -119,9 +125,10 @@ export function summarizeTeam(board: JsonRecord) {
       values: [Math.max(0, checkedIn - late - eodDone), late, eodDone, onLeave, missing],
     },
     hoursChart: {
-      labels: hours.map((row) => row.name),
-      values: hours.map((row) => row.hours),
+      labels: people.map((row) => row.name),
+      values: people.map((row) => row.hours),
     },
+    people,
   };
 }
 
@@ -350,15 +357,49 @@ export function summarizeDay(detail: JsonRecord, employee = "Employee") {
       rolled,
       dropped,
     },
-    statusChart: {
-      labels: ["Done", "Pending", "In Progress", "Rolled Over", "Dropped"],
-      values: [done, pending, inProgress, rolled, dropped],
-    },
-    hoursChart: {
-      labels: ["Hours"],
-      values: [hours],
-    },
+    statusChart: compactChart(
+      ["Done", "Pending", "In Progress", "Rolled Over", "Dropped"],
+      [done, pending, inProgress, rolled, dropped]
+    ),
+    hoursChart: hoursByGroup(tasks),
     tasks,
+  };
+}
+
+function compactChart(labels: string[], values: number[]) {
+  const pairs = labels
+    .map((label, index) => [label, values[index] ?? 0] as const)
+    .filter(([, value]) => value > 0);
+  return {
+    labels: pairs.map(([label]) => label),
+    values: pairs.map(([, value]) => value),
+  };
+}
+
+function hoursByGroup(tasks: HistoryTask[]) {
+  const byProject = new Map<string, number>();
+  const byTask = new Map<string, number>();
+  for (const task of tasks) {
+    const spent = parseHours(task.actualTime);
+    if (!spent) {
+      continue;
+    }
+    const project = task.project.trim();
+    if (project) {
+      byProject.set(project, (byProject.get(project) ?? 0) + spent);
+    }
+    const title = task.description.trim().slice(0, 32) || "Task";
+    byTask.set(title, (byTask.get(title) ?? 0) + spent);
+  }
+  if (byProject.size >= 1) {
+    return {
+      labels: [...byProject.keys()],
+      values: [...byProject.values()],
+    };
+  }
+  return {
+    labels: [...byTask.keys()],
+    values: [...byTask.values()],
   };
 }
 

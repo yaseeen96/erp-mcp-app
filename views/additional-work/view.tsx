@@ -1,6 +1,6 @@
 import { ModelContext, useCallTool, useToolContext, useViewState } from "mcp-use/react";
 import { useState } from "react";
-import { HoursBar } from "../_shared/charts.js";
+import { SmartHoursChart } from "../_shared/charts.js";
 import { TopicBar, wantsTopic } from "../_shared/topics.js";
 import {
   AppShell,
@@ -80,9 +80,12 @@ export default function AdditionalWorkView() {
         <Kpi label="Rows" value={output?.entries.length ?? 0} />
         {showHours ? <Kpi label="Hours" value={`${output?.totalHours ?? 0}h`} /> : null}
       </div>
-      {showHours ? (
+      {showHours && (output?.hoursChart.labels.length ?? 0) >= 2 ? (
         <Card title="Hours by date">
-          <HoursBar labels={output?.hoursChart.labels ?? []} values={output?.hoursChart.values ?? []} />
+          <SmartHoursChart
+            labels={output?.hoursChart.labels ?? []}
+            values={output?.hoursChart.values ?? []}
+          />
         </Card>
       ) : null}
       {showEntries ? (

@@ -85,6 +85,32 @@ export function StatusDonut({
   );
 }
 
+function isDateLabel(label: string) {
+  return /^\d{4}-\d{2}-\d{2}/.test(label) || /^\d{1,2}\s+\w{3}/.test(label);
+}
+
+export function SmartHoursChart({
+  labels,
+  values,
+  label = "Hours",
+}: {
+  labels: string[];
+  values: number[];
+  label?: string;
+}) {
+  const dated = labels.length >= 2 && labels.every(isDateLabel);
+  if (dated) {
+    return <HoursLine labels={labels} values={values} />;
+  }
+  if (labels.length === 0) {
+    return null;
+  }
+  if (labels.length === 1 && /^(hours|total)$/i.test(labels[0] ?? "")) {
+    return null;
+  }
+  return <HoursBar labels={labels} values={values} label={label} />;
+}
+
 export function HoursBar({
   labels,
   values,

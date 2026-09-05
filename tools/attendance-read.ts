@@ -73,6 +73,20 @@ const teamOutput = z.object({
     labels: z.array(z.string()),
     values: z.array(z.number()),
   }),
+  people: z.array(
+    z.object({
+      employeeId: z.string(),
+      name: z.string(),
+      designation: z.string(),
+      department: z.string(),
+      status: z.string(),
+      login: z.string(),
+      logout: z.string(),
+      hours: z.number(),
+      done: z.number(),
+      total: z.number(),
+    })
+  ),
 });
 
 const managementOutput = z.object({
@@ -528,7 +542,7 @@ export function registerAttendanceReadTools(server: MCPServer<FrappeUser> | MCPS
       name: "show-team-board",
       title: "Show team board",
       description:
-        "Team Leader board. One call is enough — do not also call get-team-dashboard. Omit topics for the full board.",
+        "Team Leader board and direct-report roster (name, status, hours). One call is enough — do not also call get-team-dashboard. Omit topics for the full board.",
       inputSchema: dateInput.extend({
         topics: teamTopics,
       }),

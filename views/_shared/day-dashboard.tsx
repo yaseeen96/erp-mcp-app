@@ -1,6 +1,6 @@
 import { ModelContext } from "mcp-use/react";
 import type { ReactNode } from "react";
-import { HoursBar, StatusDonut } from "./charts.js";
+import { StatusDonut } from "./charts.js";
 import { wantsTopic } from "./focus.js";
 import { AppShell, Card, Kpi, Pill, SiteLink, asArray, asRecord, statusTone, text, tw } from "./ui.js";
 
@@ -96,28 +96,10 @@ export function DayDashboardBody({
         {output.login && !output.logout ? <Pill tone="info">Still in</Pill> : null}
         {output.logout ? <Pill tone="good">Checked out</Pill> : null}
       </div>
-      {showHours || showTasks ? (
-        <div className={tw.grid}>
-          {showTasks ? (
-            <Card title="Task mix">
-              <StatusDonut labels={output.statusChart.labels} values={output.statusChart.values} />
-            </Card>
-          ) : null}
-          {showHours ? (
-            <Card title="Hours">
-              <HoursBar labels={output.hoursChart.labels} values={output.hoursChart.values} />
-            </Card>
-          ) : null}
-          {showTasks ? (
-            <Card title="Task counts">
-              <HoursBar
-                labels={output.statusChart.labels}
-                values={output.statusChart.values}
-                label="Tasks"
-              />
-            </Card>
-          ) : null}
-        </div>
+      {showTasks && output.statusChart.labels.length ? (
+        <Card title="Task mix">
+          <StatusDonut labels={output.statusChart.labels} values={output.statusChart.values} />
+        </Card>
       ) : null}
       {showTasks ? (
         <Card title="Tasks">

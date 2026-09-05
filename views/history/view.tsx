@@ -1,6 +1,6 @@
 import { ModelContext, useCallTool, useOpenExternal, useToolContext, useViewState } from "mcp-use/react";
 import { useState } from "react";
-import { GroupedBar, HoursLine } from "../_shared/charts.js";
+import { GroupedBar, SmartHoursChart } from "../_shared/charts.js";
 import { TopicBar, wantsTopic } from "../_shared/topics.js";
 import {
   AppShell,
@@ -138,15 +138,18 @@ export default function HistoryView() {
       <ModelContext
         content={`${output?.employeeName ?? "Employee"} history page ${state.page}: ${output?.summary ?? ""}`}
       />
-      {showHours || showTasks ? (
+      {(output?.hoursChart.labels.length ?? 0) >= 2 && (showHours || showTasks) ? (
         <div className={tw.grid}>
           {showHours ? (
-            <Card title="Net hours trend">
-              <HoursLine labels={output?.hoursChart.labels ?? []} values={output?.hoursChart.values ?? []} />
+            <Card title="Net hours by day">
+              <SmartHoursChart
+                labels={output?.hoursChart.labels ?? []}
+                values={output?.hoursChart.values ?? []}
+              />
             </Card>
           ) : null}
           {showTasks ? (
-            <Card title="Task completion">
+            <Card title="Task completion by day">
               <GroupedBar
                 labels={output?.tasksChart.labels ?? []}
                 series={[
