@@ -1,7 +1,7 @@
 import type { MCPServer } from "mcp-use";
 import { z } from "zod";
 import * as attendance from "../lib/attendance.js";
-import { ok } from "../lib/result.js";
+import { fail, ok } from "../lib/result.js";
 import { frappeFailure } from "../lib/tool-utils.js";
 import type { AttendanceCtx, FrappeUser } from "../lib/types.js";
 
@@ -10,6 +10,52 @@ const plannedTask = z.object({
   estimated_time: z.string().optional().describe("Estimate such as 2h 30m"),
   project_name: z.string().optional().describe("Optional project name"),
 });
+
+const projectGroup = z.object({
+  name: z.string().describe("Project name"),
+  tasks: z
+    .array(
+      z.object({
+        description: z.string().describe("Task description"),
+        estimated_time: z.string().optional().describe("Estimate such as 2h 30m"),
+      })
+    )
+    .min(1)
+    .describe("Tasks under this project"),
+});
+
+type ProjectGroup = z.infer<typeof projectGroup>;
+type PlannedTask = z.infer<typeof plannedTask>;
+
+function flattenProjectsAndTasks(args: {
+  projects?: ProjectGroup[];
+  tasks?: PlannedTask[];
+  project_name?: string;
+}): attendance.PlannedTaskInput[] {
+  const fromProjects = (args.projects ?? []).flatMap((project) => {
+    const projectName = project.name.trim();
+    return project.tasks
+      .filter((task) => task.description.trim())
+      .map((task) => ({
+        description: task.description.trim(),
+        estimated_time: task.estimated_time?.trim() || undefined,
+        project_name: projectName || undefined,
+      }));
+  });
+  const fallbackProject = args.project_name?.trim() || undefined;
+  const fromTasks = (args.tasks ?? [])
+    .filter((task) => task.description.trim())
+    .map((task) => ({
+      description: task.description.trim(),
+      estimated_time: task.estimated_time?.trim() || undefined,
+      project_name: task.project_name?.trim() || fallbackProject,
+    }));
+  return [...fromProjects, ...fromTasks];
+}
+
+function projectNamesFromTasks(tasks: attendance.PlannedTaskInput[]) {
+  return [...new Set(tasks.map((task) => task.project_name?.trim()).filter(Boolean))] as string[];
+}
 
 const carriedUpdate = z.object({
   name: z.string().describe("Task Entry name"),
@@ -51,9 +97,16 @@ export function registerAttendanceWriteTools(server: MCPServer<FrappeUser> | MCP
       name: "check-in",
       title: "Check in",
       description:
-        "Submit morning check-in for the signed-in employee. Creates today's Daily Work Log, planned tasks, and an Employee Checkin IN punch. WFH requires an Attendance Request except Saturday/hybrid routine days.",
+        "Start the day. One call can include several projects and many tasks. Do not also call add-tasks. WFH needs an Attendance Request except Saturday/hybrid routine days.",
       inputSchema: z.object({
-        new_tasks: z.array(plannedTask).describe("New planned tasks. Can be empty if carried tasks already exist."),
+        projects: z
+          .array(projectGroup)
+          .optional()
+          .describe("Several projects in this one call. Each has a name and its tasks."),
+        new_tasks: z
+          .array(plannedTask)
+          .optional()
+          .describe("Flat task list. Use project_name on each row, or use projects instead."),
         login_time: z.string().optional().describe("Optional HH:MM or HH:MM:SS login override"),
         carried_updates: z.array(carriedUpdate).optional().describe("Edits to carried-forward tasks"),
         work_location: z.enum(["Office", "WFH", "Remote"]).optional().describe("Defaults to Office"),
@@ -70,12 +123,23 @@ export function registerAttendanceWriteTools(server: MCPServer<FrappeUser> | MCP
     },
     async (args, ctx) => {
       try {
-        const result = await attendance.submitMorningLog(ctx as AttendanceCtx, args);
-        const loginTime = typeof result.login_time === "string" ? result.login_time : undefined;
-        return ok(`Checked in${loginTime ? ` at ${loginTime}` : ""}.`, {
-          success: true,
-          loginTime,
+        const new_tasks = flattenProjectsAndTasks({
+          projects: args.projects,
+          tasks: args.new_tasks,
         });
+        const result = await attendance.submitMorningLog(ctx as AttendanceCtx, {
+          ...args,
+          new_tasks,
+        });
+        const loginTime = typeof result.login_time === "string" ? result.login_time : undefined;
+        const names = projectNamesFromTasks(new_tasks);
+        return ok(
+          `Checked in${loginTime ? ` at ${loginTime}` : ""} with ${new_tasks.length} task${new_tasks.length === 1 ? "" : "s"}${names.length ? ` across ${names.length} project${names.length === 1 ? "" : "s"}` : ""}.`,
+          {
+            success: true,
+            loginTime,
+          }
+        );
       } catch (error) {
         return frappeFailure(error);
       }
@@ -87,7 +151,7 @@ export function registerAttendanceWriteTools(server: MCPServer<FrappeUser> | MCP
       name: "check-out",
       title: "Check out",
       description:
-        "Submit end of day: lunch window, task status/hours, optional ad-hoc tasks, Employee Checkin OUT punch, and rollover of unfinished tasks.",
+        "Finish the day: lunch, task updates, and any extra projects/tasks in this one call. Do not also call add-tasks.",
       inputSchema: z.object({
         lunch_from: z.string().describe("Lunch start time, e.g. 13:00"),
         lunch_to: z.string().describe("Lunch end time, e.g. 13:30"),
@@ -96,7 +160,14 @@ export function registerAttendanceWriteTools(server: MCPServer<FrappeUser> | MCP
           .optional()
           .describe("Ignored in production; ERPNext uses the current time. Required only in tests."),
         task_updates: z.array(eodUpdate).describe("Status and actual time for existing tasks"),
-        adhoc_tasks: z.array(adhocTask).optional().describe("Tasks discovered during the day"),
+        projects: z
+          .array(projectGroup)
+          .optional()
+          .describe("Extra projects found during the day. Each has a name and its tasks. One call."),
+        adhoc_tasks: z
+          .array(adhocTask)
+          .optional()
+          .describe("Flat extra tasks. Prefer projects when adding more than one project."),
       }),
       outputSchema: z.object({
         success: z.boolean(),
@@ -113,7 +184,10 @@ export function registerAttendanceWriteTools(server: MCPServer<FrappeUser> | MCP
           lunch_to: args.lunch_to,
           logout_time: args.logout_time ?? "",
           task_updates: args.task_updates,
-          adhoc_tasks: args.adhoc_tasks ?? [],
+          adhoc_tasks: [
+            ...flattenProjectsAndTasks({ projects: args.projects }),
+            ...(args.adhoc_tasks ?? []),
+          ],
         });
         const netHours = typeof result.net_hours === "string" ? result.net_hours : undefined;
         const logoutTime = typeof result.logout_time === "string" ? result.logout_time : undefined;
@@ -274,6 +348,79 @@ export function registerAttendanceWriteTools(server: MCPServer<FrappeUser> | MCP
     }
   );
 
+  const addTasks = server.tool(
+    {
+      name: "add-tasks",
+      title: "Add tasks",
+      description:
+        "Create one or many projects and their tasks in a single call (projects: [{ name, tasks }]). If not checked in yet, this also checks in — do not also call check-in. If already checked in, call check-out with projects instead.",
+      inputSchema: z.object({
+        projects: z
+          .array(projectGroup)
+          .optional()
+          .describe("Several projects in this one call. Each has a name and at least one task."),
+        project_name: z
+          .string()
+          .optional()
+          .describe("Fallback project for the flat tasks list when a task has no project_name."),
+        tasks: z
+          .array(plannedTask)
+          .optional()
+          .describe("Flat task list. Use projects when creating more than one project."),
+        work_location: z.enum(["Office", "WFH", "Remote"]).optional(),
+        half_day_session: z.enum(["First Half", "Second Half"]).optional(),
+      }),
+      outputSchema: z.object({
+        success: z.boolean(),
+        checkedIn: z.boolean(),
+        count: z.number(),
+        projectCount: z.number(),
+        projectNames: z.array(z.string()),
+        projectName: z.string().optional(),
+        loginTime: z.string().optional(),
+      }),
+      annotations: { readOnlyHint: false, destructiveHint: false, openWorldHint: true },
+    },
+    async (args, ctx) => {
+      try {
+        const page = await attendance.getPageState(ctx as AttendanceCtx);
+        const tasks = flattenProjectsAndTasks(args);
+        if (tasks.length === 0) {
+          return fail("Add at least one task, either under projects or in tasks.");
+        }
+        const names = projectNamesFromTasks(tasks);
+        if (page.eod_done === true || page.eod_done === 1) {
+          return fail("Already checked out today. Extra work goes in save-additional-work or tomorrow's check-in.");
+        }
+        if (page.morning_done === true || page.morning_done === 1) {
+          return fail(
+            `Already checked in. ST Attendance cannot add mid-day planned tasks. Call check-out once with projects or adhoc_tasks: ${JSON.stringify(tasks)}.`
+          );
+        }
+        const result = await attendance.submitMorningLog(ctx as AttendanceCtx, {
+          new_tasks: tasks,
+          work_location: args.work_location,
+          half_day_session: args.half_day_session,
+        });
+        const loginTime = typeof result.login_time === "string" ? result.login_time : undefined;
+        return ok(
+          `Checked in with ${tasks.length} task${tasks.length === 1 ? "" : "s"} across ${names.length || 0} project${names.length === 1 ? "" : "s"}${names.length ? ` (${names.join(", ")})` : ""}${loginTime ? ` at ${loginTime}` : ""}.`,
+          {
+            success: true,
+            checkedIn: true,
+            count: tasks.length,
+            projectCount: names.length,
+            projectNames: names,
+            projectName: names.length === 1 ? names[0] : undefined,
+            loginTime,
+          }
+        );
+      } catch (error) {
+        return frappeFailure(error);
+      }
+    }
+  );
+
   const deleteCarried = server.tool(
     {
       name: "delete-carried-task",
@@ -304,6 +451,7 @@ export function registerAttendanceWriteTools(server: MCPServer<FrappeUser> | MCP
     deleteRecurring,
     saveAdditional,
     deleteAdditional,
+    addTasks,
     deleteCarried,
   };
 }

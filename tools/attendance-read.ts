@@ -4,13 +4,18 @@ import * as attendance from "../lib/attendance.js";
 import { buildHistoryExcel, buildHistoryPdf } from "../lib/export-files.js";
 import { storeExportFile } from "../lib/export-store.js";
 import { loadHistoryPage } from "../lib/history-data.js";
+import { loadProjects } from "../lib/projects.js";
 import { resolveWorkLocationConfig } from "../lib/work-location.js";
 import { ok } from "../lib/result.js";
 import { frappeFailure } from "../lib/tool-utils.js";
 import type { AttendanceCtx, FrappeUser } from "../lib/types.js";
 import {
+  summarizeAdditional,
+  summarizeDay,
+  summarizeEmployeeDay,
   summarizeHistory,
   summarizeManagement,
+  summarizeRecurring,
   summarizeTeam,
   summarizeToday,
   tasksFromDetail,
@@ -36,6 +41,7 @@ const todayOutput = z.object({
     pending: z.number(),
     carried: z.number(),
   }),
+  projectNames: z.array(z.string()),
   chart: z.object({
     labels: z.array(z.string()),
     values: z.array(z.number()),
@@ -103,6 +109,145 @@ const historyTask = z.object({
   actualTime: z.string(),
 });
 
+const dayTopics = z
+  .array(z.enum(["hours", "tasks"]))
+  .optional()
+  .describe("Omit for the full day UI. hours=time in/out. tasks=task mix and list.");
+
+const todayTopics = z
+  .array(z.enum(["hours", "tasks"]))
+  .optional()
+  .describe("Omit for the full today workspace. hours=login and mix. tasks=task chart and list.");
+
+const teamTopics = z
+  .array(z.enum(["presence", "hours", "people"]))
+  .optional()
+  .describe("Omit for the full team board. presence=who is in. hours=net hours. people=roster and day drill-in.");
+
+const managementTopics = z
+  .array(z.enum(["status", "departments", "rankings"]))
+  .optional()
+  .describe("Omit for the full HR board. status=company mix. departments=dept bars. rankings=hours table.");
+
+const recurringTopics = z
+  .array(z.enum(["status", "list"]))
+  .optional()
+  .describe("Omit for the full recurring UI. status=active mix. list=templates.");
+
+const additionalTopics = z
+  .array(z.enum(["hours", "entries"]))
+  .optional()
+  .describe("Omit for the full extra-work UI. hours=hours chart. entries=rows.");
+
+const projectTopics = z
+  .array(z.enum(["list", "tasks"]))
+  .optional()
+  .describe("Omit for the full projects UI. list=project names. tasks=today's tasks under each.");
+
+const historyTopics = z
+  .array(z.enum(["days", "hours", "tasks", "attendance"]))
+  .optional()
+  .describe("Omit for the full history UI. Same slices as export-history.");
+
+const dayOutput = z.object({
+  summary: z.string(),
+  date: z.string(),
+  employeeName: z.string(),
+  login: z.string(),
+  logout: z.string(),
+  hours: z.number(),
+  late: z.boolean(),
+  taskCounts: z.object({
+    total: z.number(),
+    done: z.number(),
+    pending: z.number(),
+    inProgress: z.number(),
+    rolled: z.number(),
+    dropped: z.number(),
+  }),
+  statusChart: z.object({
+    labels: z.array(z.string()),
+    values: z.array(z.number()),
+  }),
+  hoursChart: z.object({
+    labels: z.array(z.string()),
+    values: z.array(z.number()),
+  }),
+  tasks: z.array(historyTask),
+});
+
+const employeeDayOutput = dayOutput.extend({
+  employeeId: z.string(),
+});
+
+const recurringOutput = z.object({
+  summary: z.string(),
+  count: z.number(),
+  active: z.number(),
+  inactive: z.number(),
+  statusChart: z.object({
+    labels: z.array(z.string()),
+    values: z.array(z.number()),
+  }),
+  rows: z.array(
+    z.object({
+      name: z.string(),
+      description: z.string(),
+      project: z.string(),
+      estimatedTime: z.string(),
+      active: z.boolean(),
+      days: z.array(z.string()),
+    })
+  ),
+});
+
+const projectOutput = z.object({
+  summary: z.string(),
+  date: z.string(),
+  morningDone: z.boolean(),
+  eodDone: z.boolean(),
+  count: z.number(),
+  projects: z.array(
+    z.object({
+      name: z.string(),
+      todayCount: z.number(),
+      done: z.number(),
+      sources: z.array(z.string()),
+      tasks: z.array(
+        z.object({
+          name: z.string(),
+          description: z.string(),
+          status: z.string(),
+          estimate: z.string(),
+          actualTime: z.string(),
+        })
+      ),
+    })
+  ),
+});
+
+const additionalOutput = z.object({
+  summary: z.string(),
+  totalHours: z.number(),
+  hasMore: z.boolean(),
+  hoursChart: z.object({
+    labels: z.array(z.string()),
+    values: z.array(z.number()),
+  }),
+  entries: z.array(
+    z.object({
+      name: z.string(),
+      date: z.string(),
+      project: z.string(),
+      hours: z.number(),
+      hoursLabel: z.string(),
+      description: z.string(),
+      remarks: z.string(),
+      status: z.string(),
+    })
+  ),
+});
+
 const historyOutput = z.object({
   summary: z.string(),
   employeeName: z.string(),
@@ -138,7 +283,8 @@ export function registerAttendanceReadTools(server: MCPServer<FrappeUser> | MCPS
     {
       name: "get-today",
       title: "Get today",
-      description: "Load the signed-in employee's Daily Work Log, tasks, shift, and leave for today.",
+      description: "View helper: reload today's work log. Models must use show-today instead.",
+      visibility: "app",
       inputSchema: z.object({}),
       outputSchema: todayOutput,
       annotations: { readOnlyHint: true, destructiveHint: false, openWorldHint: true },
@@ -161,7 +307,8 @@ export function registerAttendanceReadTools(server: MCPServer<FrappeUser> | MCPS
     {
       name: "get-team-dashboard",
       title: "Get team dashboard",
-      description: "Team Leader view of direct reports for a date: presence, late, leave, hours, and tasks.",
+      description: "View helper: reload the team board. Models must use show-team-board instead.",
+      visibility: "app",
       inputSchema: dateInput,
       outputSchema: teamOutput,
       annotations: { readOnlyHint: true, destructiveHint: false, openWorldHint: true },
@@ -181,7 +328,8 @@ export function registerAttendanceReadTools(server: MCPServer<FrappeUser> | MCPS
     {
       name: "get-management-dashboard",
       title: "Get management dashboard",
-      description: "HR Manager company-wide attendance for a date: department totals, rankings, and missing staff.",
+      description: "View helper: reload the HR board. Models must use show-management-board instead.",
+      visibility: "app",
       inputSchema: dateInput,
       outputSchema: managementOutput,
       annotations: { readOnlyHint: true, destructiveHint: false, openWorldHint: true },
@@ -201,16 +349,13 @@ export function registerAttendanceReadTools(server: MCPServer<FrappeUser> | MCPS
     {
       name: "get-employee-day",
       title: "Get employee day",
-      description: "Full task and check-in detail for one employee on a date. HR or that employee's Team Leader only.",
+      description: "View helper: one employee's day for board drill-in. Models must use show-employee-day instead.",
+      visibility: "app",
       inputSchema: z.object({
         employeeName: z.string().describe("Employee ID, e.g. HR-EMP-00001"),
         date: z.string().optional().describe("Date YYYY-MM-DD. Defaults to today."),
       }),
-      outputSchema: z.object({
-        summary: z.string(),
-        date: z.string(),
-        employeeName: z.string(),
-      }),
+      outputSchema: employeeDayOutput,
       annotations: { readOnlyHint: true, destructiveHint: false, openWorldHint: true },
     },
     async ({ employeeName, date }, ctx) => {
@@ -220,16 +365,7 @@ export function registerAttendanceReadTools(server: MCPServer<FrappeUser> | MCPS
           employeeName,
           date
         );
-        const tasks = Array.isArray(detail.tasks) ? detail.tasks : [];
-        const name =
-          typeof detail.employee === "object" && detail.employee
-            ? String((detail.employee as { employee_name?: string }).employee_name ?? employeeName)
-            : employeeName;
-        const data = {
-          summary: `${name} on ${String(detail.date ?? date ?? "today")}: ${tasks.length} tasks.`,
-          date: String(detail.date ?? date ?? ""),
-          employeeName: name,
-        };
+        const data = summarizeEmployeeDay(detail, employeeName);
         return ok(data.summary, data, { detail });
       } catch (error) {
         return frappeFailure(error);
@@ -241,8 +377,8 @@ export function registerAttendanceReadTools(server: MCPServer<FrappeUser> | MCPS
     {
       name: "get-history",
       title: "Get my history",
-      description:
-        "One call for recent personal attendance. Page 0 is the last 15 days and already includes each day's task titles. Use this for 'past week' or 'what did I work on'. Do not call get-history-day in a loop.",
+      description: "View helper: reload history with task titles. Models must use show-history instead.",
+      visibility: "app",
       inputSchema: z.object({
         page: z.number().int().min(0).optional().describe("0-based page of 15 days. Default 0 (most recent)."),
       }),
@@ -291,25 +427,40 @@ export function registerAttendanceReadTools(server: MCPServer<FrappeUser> | MCPS
     }
   );
 
+  const listProjects = server.tool(
+    {
+      name: "list-projects",
+      title: "List projects",
+      description: "View helper: reload projects. Models must use show-projects instead.",
+      visibility: "app",
+      inputSchema: z.object({}),
+      outputSchema: projectOutput,
+      annotations: { readOnlyHint: true, destructiveHint: false, openWorldHint: true },
+    },
+    async (_args, ctx) => {
+      try {
+        const { page, data } = await loadProjects(ctx as AttendanceCtx);
+        return ok(data.summary, data, { page });
+      } catch (error) {
+        return frappeFailure(error);
+      }
+    }
+  );
+
   const listRecurring = server.tool(
     {
       name: "list-recurring-tasks",
       title: "List recurring tasks",
-      description: "List the signed-in employee's recurring task templates.",
+      description: "View helper: reload recurring templates. Models must use show-recurring instead.",
+      visibility: "app",
       inputSchema: z.object({}),
-      outputSchema: z.object({
-        summary: z.string(),
-        count: z.number(),
-      }),
+      outputSchema: recurringOutput,
       annotations: { readOnlyHint: true, destructiveHint: false, openWorldHint: true },
     },
     async (_args, ctx) => {
       try {
         const rows = await attendance.getRecurringTasks(ctx as AttendanceCtx);
-        const data = {
-          summary: `${rows.length} recurring task templates.`,
-          count: rows.length,
-        };
+        const data = summarizeRecurring(rows);
         return ok(data.summary, data, { rows });
       } catch (error) {
         return frappeFailure(error);
@@ -321,27 +472,18 @@ export function registerAttendanceReadTools(server: MCPServer<FrappeUser> | MCPS
     {
       name: "list-additional-work",
       title: "List additional work",
-      description: "Paginated additional-work entries for the signed-in employee.",
+      description: "View helper: reload additional work. Models must use show-additional-work instead.",
+      visibility: "app",
       inputSchema: z.object({
         page: z.number().int().min(0).optional().describe("0-based page. Default 0."),
       }),
-      outputSchema: z.object({
-        summary: z.string(),
-        totalHours: z.number(),
-        hasMore: z.boolean(),
-      }),
+      outputSchema: additionalOutput,
       annotations: { readOnlyHint: true, destructiveHint: false, openWorldHint: true },
     },
     async ({ page }, ctx) => {
       try {
         const result = await attendance.getAdditionalWork(ctx as AttendanceCtx, page ?? 0);
-        const entries = Array.isArray(result.entries) ? result.entries : [];
-        const totalHours = typeof result.total_hours === "number" ? result.total_hours : 0;
-        const data = {
-          summary: `${entries.length} additional-work rows, ${totalHours}h on this page.`,
-          totalHours,
-          hasMore: Boolean(result.has_more),
-        };
+        const data = summarizeAdditional(result);
         return ok(data.summary, data, { result });
       } catch (error) {
         return frappeFailure(error);
@@ -353,8 +495,11 @@ export function registerAttendanceReadTools(server: MCPServer<FrappeUser> | MCPS
     {
       name: "show-today",
       title: "Show today",
-      description: "Open the interactive today card: check-in, EOD, tasks, and today's chart.",
-      inputSchema: z.object({}),
+      description:
+        "Today's status, tasks, projects, and check-in/EOD workspace. One call is enough — do not also call get-today or show-projects for today's work. Omit topics for the full workspace.",
+      inputSchema: z.object({
+        topics: todayTopics,
+      }),
       outputSchema: todayOutput,
       view: {
         name: "today",
@@ -382,8 +527,11 @@ export function registerAttendanceReadTools(server: MCPServer<FrappeUser> | MCPS
     {
       name: "show-team-board",
       title: "Show team board",
-      description: "Open the team attendance board with KPIs and charts. Team Leaders only.",
-      inputSchema: dateInput,
+      description:
+        "Team Leader board. One call is enough — do not also call get-team-dashboard. Omit topics for the full board.",
+      inputSchema: dateInput.extend({
+        topics: teamTopics,
+      }),
       outputSchema: teamOutput,
       view: {
         name: "team-board",
@@ -408,8 +556,11 @@ export function registerAttendanceReadTools(server: MCPServer<FrappeUser> | MCPS
     {
       name: "show-management-board",
       title: "Show management board",
-      description: "Open the HR management dashboard with department charts and hour rankings.",
-      inputSchema: dateInput,
+      description:
+        "HR company board. One call is enough — do not also call get-management-dashboard. Omit topics for the full board.",
+      inputSchema: dateInput.extend({
+        topics: managementTopics,
+      }),
       outputSchema: managementOutput,
       view: {
         name: "management-board",
@@ -435,9 +586,10 @@ export function registerAttendanceReadTools(server: MCPServer<FrappeUser> | MCPS
       name: "show-history",
       title: "Show history",
       description:
-        "Open the history board (charts). For a text answer about recent work, call get-history once instead.",
+        "Recent personal attendance, including each day's task titles. Use this for 'past week', 'what did I work on', or a history UI. One call is enough — do not also call get-history or loop show-day. Omit topics for the full UI.",
       inputSchema: z.object({
         page: z.number().int().min(0).optional().describe("0-based page. Default 0."),
+        topics: historyTopics,
       }),
       outputSchema: historyOutput,
       view: {
@@ -450,9 +602,161 @@ export function registerAttendanceReadTools(server: MCPServer<FrappeUser> | MCPS
     },
     async ({ page }, ctx) => {
       try {
-        const history = await attendance.getMyHistory(ctx as AttendanceCtx, page ?? 0);
-        const data = summarizeHistory(history);
+        const { history, data } = await loadHistoryPage(ctx as AttendanceCtx, page ?? 0);
         return ok(data.summary, data, { history });
+      } catch (error) {
+        return frappeFailure(error);
+      }
+    }
+  );
+
+  const showDay = server.tool(
+    {
+      name: "show-day",
+      title: "Show day",
+      description:
+        "One personal date. Use this only when they name a single date. For a range or 'last week', call show-history once instead. Omit topics for the full day UI.",
+      inputSchema: z.object({
+        date: z.string().describe("Date YYYY-MM-DD"),
+        topics: dayTopics,
+      }),
+      outputSchema: dayOutput,
+      view: {
+        name: "day",
+        description: "Single-day attendance and task charts",
+        prefersBorder: false,
+        csp: viewCsp,
+      },
+      annotations: { readOnlyHint: true, destructiveHint: false, openWorldHint: true },
+    },
+    async ({ date }, ctx) => {
+      try {
+        const detail = await attendance.getHistoryDayDetail(ctx as AttendanceCtx, date);
+        const auth = (ctx as AttendanceCtx).auth?.user;
+        const data = summarizeDay(detail, auth?.fullName || auth?.email || auth?.id || "Employee");
+        return ok(data.summary, data, { detail });
+      } catch (error) {
+        return frappeFailure(error);
+      }
+    }
+  );
+
+  const showEmployeeDay = server.tool(
+    {
+      name: "show-employee-day",
+      title: "Show employee day",
+      description:
+        "One team member's day. Team Leaders and HR only. One call is enough — do not also call get-employee-day. For the whole team, use show-team-board once instead of looping this.",
+      inputSchema: z.object({
+        employeeName: z.string().describe("Employee ID, e.g. HR-EMP-00001"),
+        date: z.string().optional().describe("Date YYYY-MM-DD. Defaults to today."),
+        topics: dayTopics,
+      }),
+      outputSchema: employeeDayOutput,
+      view: {
+        name: "employee-day",
+        description: "Team member day attendance and task charts",
+        prefersBorder: false,
+        csp: viewCsp,
+      },
+      annotations: { readOnlyHint: true, destructiveHint: false, openWorldHint: true },
+    },
+    async ({ employeeName, date }, ctx) => {
+      try {
+        const detail = await attendance.getEmployeeTaskDetail(
+          ctx as AttendanceCtx,
+          employeeName,
+          date
+        );
+        const data = summarizeEmployeeDay(detail, employeeName);
+        return ok(data.summary, data, { detail });
+      } catch (error) {
+        return frappeFailure(error);
+      }
+    }
+  );
+
+  const showRecurring = server.tool(
+    {
+      name: "show-recurring",
+      title: "Show recurring tasks",
+      description:
+        "Recurring templates. One call is enough — do not also call list-recurring-tasks. Omit topics for the full UI.",
+      inputSchema: z.object({
+        topics: recurringTopics,
+      }),
+      outputSchema: recurringOutput,
+      view: {
+        name: "recurring",
+        description: "Recurring task templates",
+        prefersBorder: false,
+        csp: viewCsp,
+      },
+      annotations: { readOnlyHint: true, destructiveHint: false, openWorldHint: true },
+    },
+    async (_args, ctx) => {
+      try {
+        const rows = await attendance.getRecurringTasks(ctx as AttendanceCtx);
+        const data = summarizeRecurring(rows);
+        return ok(data.summary, data, { rows });
+      } catch (error) {
+        return frappeFailure(error);
+      }
+    }
+  );
+
+  const showAdditionalWork = server.tool(
+    {
+      name: "show-additional-work",
+      title: "Show additional work",
+      description:
+        "Additional work. One call is enough — do not also call list-additional-work. Omit topics for the full UI.",
+      inputSchema: z.object({
+        page: z.number().int().min(0).optional().describe("0-based page. Default 0."),
+        topics: additionalTopics,
+      }),
+      outputSchema: additionalOutput,
+      view: {
+        name: "additional-work",
+        description: "Additional work hours and entries",
+        prefersBorder: false,
+        csp: viewCsp,
+      },
+      annotations: { readOnlyHint: true, destructiveHint: false, openWorldHint: true },
+    },
+    async ({ page }, ctx) => {
+      try {
+        const result = await attendance.getAdditionalWork(ctx as AttendanceCtx, page ?? 0);
+        const data = summarizeAdditional(result);
+        return ok(data.summary, data, { result });
+      } catch (error) {
+        return frappeFailure(error);
+      }
+    }
+  );
+
+  const showProjects = server.tool(
+    {
+      name: "show-projects",
+      title: "Show projects",
+      description:
+        "All known project names (today, recurring, extra work). For today's projects only, show-today is enough. Do not also call list-projects. To create projects, call add-tasks once — not this tool.",
+      inputSchema: z.object({
+        topics: projectTopics,
+      }),
+      outputSchema: projectOutput,
+      view: {
+        name: "projects",
+        description: "Projects and their tasks",
+        prefersBorder: false,
+        csp: viewCsp,
+      },
+      annotations: { readOnlyHint: true, destructiveHint: false, openWorldHint: true },
+    },
+    async (_args, ctx) => {
+      try {
+        const { page, data } = await loadProjects(ctx as AttendanceCtx);
+        return ok(data.summary, data, { page });
       } catch (error) {
         return frappeFailure(error);
       }
@@ -464,7 +768,7 @@ export function registerAttendanceReadTools(server: MCPServer<FrappeUser> | MCPS
       name: "export-history",
       title: "Export history",
       description:
-        "Download personal attendance history as Excel (.xlsx) and/or PDF. Both files use the same topics. If the user only asks for a PDF or Excel with no focus, omit topics for the full report. If they ask for only one slice (days worked, hours, tasks, in/out), set topics to that slice. Do not paste CSV.",
+        "Download Excel and/or PDF. If they only want a file, call this once and do not also call show-history. Omit topics for the full report.",
       inputSchema: z.object({
         format: z
           .enum(["xlsx", "pdf", "both"])
@@ -539,6 +843,7 @@ export function registerAttendanceReadTools(server: MCPServer<FrappeUser> | MCPS
     getEmployeeDay,
     getHistory,
     getHistoryDay,
+    listProjects,
     listRecurring,
     listAdditional,
     exportHistory,
@@ -546,5 +851,10 @@ export function registerAttendanceReadTools(server: MCPServer<FrappeUser> | MCPS
     showTeamBoard,
     showManagementBoard,
     showHistory,
+    showDay,
+    showEmployeeDay,
+    showRecurring,
+    showAdditionalWork,
+    showProjects,
   };
 }

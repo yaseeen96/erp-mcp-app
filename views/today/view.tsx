@@ -2,9 +2,19 @@ import {
   ModelContext,
   useCallTool,
   useToolContext,
+  useViewState,
 } from "mcp-use/react";
 import { useMemo, useState } from "react";
 import { HoursBar, StatusDonut } from "../_shared/charts.js";
+import {
+  emptyTask,
+  flattenPlanned,
+  TaskDraftEditor,
+  toProjectGroups,
+  type DraftProject,
+  type DraftTask,
+} from "../_shared/task-drafts.js";
+import { TopicBar, wantsTopic } from "../_shared/topics.js";
 import {
   AppShell,
   Card,
@@ -20,15 +30,20 @@ import {
   tw,
 } from "../_shared/ui.js";
 
+const todayTopics = ["hours", "tasks"] as const;
+
 export default function TodayView() {
   const view = useToolContext<"show-today">();
   const checkIn = useCallTool("check-in");
   const checkOut = useCallTool("check-out");
   const reset = useCallTool("reset-checkin");
   const refresh = useCallTool("get-today");
+  const [state, setState] = useViewState({ topics: view.toolInput?.topics ?? [] });
 
-  const [description, setDescription] = useState("");
-  const [estimate, setEstimate] = useState("");
+  const [projects, setProjects] = useState<DraftProject[]>([]);
+  const [looseTasks, setLooseTasks] = useState<DraftTask[]>([emptyTask()]);
+  const [adhocProjects, setAdhocProjects] = useState<DraftProject[]>([]);
+  const [adhocLoose, setAdhocLoose] = useState<DraftTask[]>([]);
   const [location, setLocation] = useState<"Office" | "WFH" | "Remote">();
   const [lunchFrom, setLunchFrom] = useState("13:00");
   const [lunchTo, setLunchTo] = useState("13:30");
@@ -71,6 +86,9 @@ export default function TodayView() {
   const morningDone = Boolean(output?.morningDone);
   const eodDone = Boolean(output?.eodDone);
   const busy = checkIn.isPending || checkOut.isPending || reset.isPending || refresh.isPending;
+  const topics = state.topics.length ? state.topics : undefined;
+  const showHours = wantsTopic(topics, "hours");
+  const showTasks = wantsTopic(topics, "tasks");
 
   async function reload() {
     await refresh.callTool({}).catch(() => {});
@@ -83,6 +101,12 @@ export default function TodayView() {
       subtitle={output?.summary}
       actions={
         <div className={tw.actions}>
+          <TopicBar
+            all={todayTopics}
+            selected={topics}
+            labels={{ hours: "Hours", tasks: "Tasks" }}
+            onChange={(next) => setState({ topics: next ?? [] })}
+          />
           <SiteLink path="/daily-checkin" label="Open ERPNext" />
         </div>
       }
@@ -95,11 +119,13 @@ export default function TodayView() {
       <div className={tw.kpis}>
         <Kpi label="Date" value={output?.date ?? "—"} />
         <Kpi label="Status" value={eodDone ? "EOD" : morningDone ? "In" : "Out"} />
-        <Kpi label="Login" value={output?.loginTime || "—"} />
-        <Kpi
-          label="Tasks"
-          value={`${output?.taskCounts.done ?? 0}/${output?.taskCounts.total ?? 0}`}
-        />
+        {showHours ? <Kpi label="Login" value={output?.loginTime || "—"} /> : null}
+        {showTasks ? (
+          <Kpi
+            label="Tasks"
+            value={`${output?.taskCounts.done ?? 0}/${output?.taskCounts.total ?? 0}`}
+          />
+        ) : null}
       </div>
       <div className={tw.actions}>
         <Pill tone={eodDone ? "good" : morningDone ? "info" : "warn"}>
@@ -109,68 +135,69 @@ export default function TodayView() {
         {output?.isTeamLeader ? <Pill>Team Leader</Pill> : null}
       </div>
 
-      <div className={tw.grid}>
-        <Card title="Task mix">
-          <StatusDonut
-            labels={output?.chart.labels ?? []}
-            values={output?.chart.values ?? []}
-          />
-        </Card>
-        <Card title="Hours proxy">
-          <HoursBar
-            labels={["Done", "Open", "Carried"]}
-            values={output?.chart.values ?? []}
-            label="Count"
-          />
-        </Card>
-      </div>
+      {showHours || showTasks ? (
+        <div className={tw.grid}>
+          {showTasks ? (
+            <Card title="Task mix">
+              <StatusDonut
+                labels={output?.chart.labels ?? []}
+                values={output?.chart.values ?? []}
+              />
+            </Card>
+          ) : null}
+          {showHours ? (
+            <Card title="Hours proxy">
+              <HoursBar
+                labels={["Done", "Open", "Carried"]}
+                values={output?.chart.values ?? []}
+                label="Count"
+              />
+            </Card>
+          ) : null}
+        </div>
+      ) : null}
 
-      <Card title="Tasks">
-        {tasks.length === 0 ? (
-          <p className={tw.empty}>No tasks yet. Add one before check-in.</p>
-        ) : (
-          <table className={tw.table}>
-            <thead>
-              <tr>
-                <th>Task</th>
-                <th>Project</th>
-                <th>Status</th>
-                <th>Est.</th>
-              </tr>
-            </thead>
-            <tbody>
-              {tasks.map((task) => (
-                <tr key={text(task.name)}>
-                  <td>{text(task.description)}</td>
-                  <td>{text(task.project_name)}</td>
-                  <td>
-                    <Pill tone={statusTone(text(task.status))}>{text(task.status)}</Pill>
-                  </td>
-                  <td>{text(task.estimated_time)}</td>
+      {showTasks ? (
+        <Card title="Tasks">
+          {tasks.length === 0 ? (
+            <p className={tw.empty}>No tasks yet. Add one before check-in.</p>
+          ) : (
+            <table className={tw.table}>
+              <thead>
+                <tr>
+                  <th>Task</th>
+                  <th>Project</th>
+                  <th>Status</th>
+                  <th>Est.</th>
                 </tr>
-              ))}
-            </tbody>
-          </table>
-        )}
-      </Card>
+              </thead>
+              <tbody>
+                {tasks.map((task) => (
+                  <tr key={text(task.name)}>
+                    <td>{text(task.description)}</td>
+                    <td>{text(task.project_name)}</td>
+                    <td>
+                      <Pill tone={statusTone(text(task.status))}>{text(task.status)}</Pill>
+                    </td>
+                    <td>{text(task.estimated_time)}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          )}
+        </Card>
+      ) : null}
 
       {!morningDone ? (
         <Card title="Morning check-in">
           <div className={tw.form}>
-          <label className={tw.field}>
-            Planned task
-            <textarea
-              className={tw.control}
-              rows={3}
-              value={description}
-              onChange={(event) => setDescription(event.target.value)}
-              placeholder="What will you work on?"
-            />
-          </label>
-          <label className={tw.field}>
-            Estimate
-            <input className={tw.control} value={estimate} onChange={(event) => setEstimate(event.target.value)} placeholder="2h 30m" />
-          </label>
+          <p className={tw.sub}>Add projects and as many tasks as you need. Check-in sends them in one call.</p>
+          <TaskDraftEditor
+            projects={projects}
+            loose={looseTasks}
+            onProjects={setProjects}
+            onLoose={setLooseTasks}
+          />
           <label className={tw.field}>
             Work location
             <select
@@ -200,9 +227,8 @@ export default function TodayView() {
                 setActionError(undefined);
                 void checkIn
                   .callTool({
-                    new_tasks: description.trim()
-                      ? [{ description: description.trim(), estimated_time: estimate }]
-                      : [],
+                    projects: toProjectGroups(projects),
+                    new_tasks: flattenPlanned([], looseTasks),
                     work_location: location ?? output?.workLocation.value ?? "Office",
                   })
                   .then(reload)
@@ -227,6 +253,13 @@ export default function TodayView() {
             Lunch to
             <input className={tw.control} value={lunchTo} onChange={(event) => setLunchTo(event.target.value)} />
           </label>
+          <p className={tw.sub}>Add extra tasks or projects here. They go out with Submit EOD in one call.</p>
+          <TaskDraftEditor
+            projects={adhocProjects}
+            loose={adhocLoose}
+            onProjects={setAdhocProjects}
+            onLoose={setAdhocLoose}
+          />
           {shownUpdates.map((task, index) => (
             <label className={tw.field} key={task.name || index}>
               {text(tasks[index]?.description, task.name)} status
@@ -271,6 +304,8 @@ export default function TodayView() {
                     lunch_from: lunchFrom,
                     lunch_to: lunchTo,
                     task_updates: shownUpdates,
+                    projects: toProjectGroups(adhocProjects),
+                    adhoc_tasks: flattenPlanned([], adhocLoose),
                   })
                   .then(reload)
                   .catch((error: Error) => setActionError(error.message));

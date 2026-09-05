@@ -1,6 +1,7 @@
 import { ModelContext, useCallTool, useOpenExternal, useToolContext, useViewState } from "mcp-use/react";
 import { useState } from "react";
 import { GroupedBar, HoursLine } from "../_shared/charts.js";
+import { TopicBar, wantsTopic } from "../_shared/topics.js";
 import {
   AppShell,
   Card,
@@ -15,14 +16,25 @@ import {
   tw,
 } from "../_shared/ui.js";
 
+const historyTopics = ["days", "hours", "tasks", "attendance"] as const;
+
 export default function HistoryView() {
   const view = useToolContext<"show-history">();
   const historyTool = useCallTool("get-history");
   const dayTool = useCallTool("get-history-day");
   const exportTool = useCallTool("export-history");
   const openExternal = useOpenExternal();
-  const [state, setState] = useViewState({ page: view.toolInput?.page ?? 0, date: "" });
+  const [state, setState] = useViewState({
+    page: view.toolInput?.page ?? 0,
+    date: "",
+    topics: view.toolInput?.topics ?? [],
+  });
   const [selectedDate, setSelectedDate] = useState(state.date);
+  const topics = state.topics.length ? state.topics : undefined;
+  const showHours = wantsTopic(topics, "hours") || wantsTopic(topics, "days");
+  const showTasks = wantsTopic(topics, "tasks");
+  const showDays =
+    wantsTopic(topics, "attendance") || wantsTopic(topics, "days") || wantsTopic(topics, "hours");
 
   const output =
     historyTool.data?.structuredContent ?? (view.status === "ready" ? view.toolOutput : undefined);
@@ -55,6 +67,12 @@ export default function HistoryView() {
       subtitle={output?.summary}
       actions={
         <div className={tw.actions}>
+          <TopicBar
+            all={historyTopics}
+            selected={topics}
+            labels={{ days: "Days", hours: "Hours", tasks: "Tasks", attendance: "Attendance" }}
+            onChange={(next) => setState({ ...state, topics: next ?? [] })}
+          />
           <button
             type="button"
             className={tw.btn}
@@ -85,7 +103,7 @@ export default function HistoryView() {
             disabled={exportTool.isPending}
             onClick={() => {
               void exportTool
-                .callTool({ format: "xlsx", page: state.page })
+                .callTool({ format: "xlsx", page: state.page, topics })
                 .then((result) => {
                   for (const file of result.structuredContent.files) {
                     void openExternal({ url: file.url });
@@ -102,7 +120,7 @@ export default function HistoryView() {
             disabled={exportTool.isPending}
             onClick={() => {
               void exportTool
-                .callTool({ format: "pdf", page: state.page })
+                .callTool({ format: "pdf", page: state.page, topics })
                 .then((result) => {
                   for (const file of result.structuredContent.files) {
                     void openExternal({ url: file.url });
@@ -120,20 +138,27 @@ export default function HistoryView() {
       <ModelContext
         content={`${output?.employeeName ?? "Employee"} history page ${state.page}: ${output?.summary ?? ""}`}
       />
-      <div className={tw.grid}>
-        <Card title="Net hours trend">
-          <HoursLine labels={output?.hoursChart.labels ?? []} values={output?.hoursChart.values ?? []} />
-        </Card>
-        <Card title="Task completion">
-          <GroupedBar
-            labels={output?.tasksChart.labels ?? []}
-            series={[
-              { key: "Done", values: output?.tasksChart.done ?? [], color: "#EE1C29" },
-              { key: "Total", values: output?.tasksChart.total ?? [], color: "#F5C16C" },
-            ]}
-          />
-        </Card>
-      </div>
+      {showHours || showTasks ? (
+        <div className={tw.grid}>
+          {showHours ? (
+            <Card title="Net hours trend">
+              <HoursLine labels={output?.hoursChart.labels ?? []} values={output?.hoursChart.values ?? []} />
+            </Card>
+          ) : null}
+          {showTasks ? (
+            <Card title="Task completion">
+              <GroupedBar
+                labels={output?.tasksChart.labels ?? []}
+                series={[
+                  { key: "Done", values: output?.tasksChart.done ?? [], color: "#EE1C29" },
+                  { key: "Total", values: output?.tasksChart.total ?? [], color: "#F5C16C" },
+                ]}
+              />
+            </Card>
+          ) : null}
+        </div>
+      ) : null}
+      {showDays ? (
       <Card title="Days">
         <table className={tw.table}>
           <thead>
@@ -178,6 +203,7 @@ export default function HistoryView() {
           </tbody>
         </table>
       </Card>
+      ) : null}
       {selectedDate ? (
         <Card title={`Detail · ${selectedDate}`}>
           {dayTool.isPending ? <PendingState label="Loading day…" /> : null}

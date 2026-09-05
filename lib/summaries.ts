@@ -1,13 +1,13 @@
 import type { JsonRecord } from "./types.js";
 
-function asRecord(value: unknown): JsonRecord | undefined {
+export function asRecord(value: unknown): JsonRecord | undefined {
   if (value && typeof value === "object" && !Array.isArray(value)) {
     return value as JsonRecord;
   }
   return undefined;
 }
 
-function asArray(value: unknown): unknown[] {
+export function asArray(value: unknown): unknown[] {
   return Array.isArray(value) ? value : [];
 }
 
@@ -46,9 +46,17 @@ export function summarizeToday(page: JsonRecord) {
   const morningDone = boolValue(page.morning_done);
   const eodDone = boolValue(page.eod_done);
   const status = eodDone ? "checked out" : morningDone ? "checked in" : "not checked in";
+  const projectNames = [
+    ...new Set(
+      tasks.flatMap((task) => {
+        const name = stringValue(asRecord(task)?.project_name).trim();
+        return name ? [name] : [];
+      })
+    ),
+  ];
 
   return {
-    summary: `${employee} is ${status} on ${stringValue(page.date)}. ${done}/${tasks.length} tasks done.`,
+    summary: `${employee} is ${status} on ${stringValue(page.date)}. ${done}/${tasks.length} tasks done${projectNames.length ? `. Projects: ${projectNames.join(", ")}` : ""}.`,
     date: stringValue(page.date),
     employeeName: employee,
     morningDone,
@@ -63,6 +71,7 @@ export function summarizeToday(page: JsonRecord) {
       pending,
       carried,
     },
+    projectNames,
     chart: {
       labels: ["Done", "Open", "Carried"],
       values: [done, pending, carried],
@@ -231,6 +240,125 @@ export function summarizeHistory(
       done: [...days].reverse().map((row) => row.done),
       total: [...days].reverse().map((row) => row.total),
     },
+  };
+}
+
+export function summarizeEmployeeDay(detail: JsonRecord, fallbackId: string) {
+  const emp = asRecord(detail.employee) ?? {};
+  const name = stringValue(emp.employee_name, stringValue(emp.name, fallbackId));
+  return {
+    ...summarizeDay(detail, name),
+    employeeId: stringValue(emp.name, fallbackId),
+  };
+}
+
+export function summarizeRecurring(rows: unknown[]) {
+  const templates = rows.flatMap((row) => {
+    const record = asRecord(row);
+    if (!record) {
+      return [];
+    }
+    const days = asArray(record.days).length
+      ? asArray(record.days).map((day) => stringValue(asRecord(day)?.name, stringValue(day)))
+      : stringValue(record.recurring_days)
+          .split("\n")
+          .map((day) => day.trim())
+          .filter(Boolean);
+    return [
+      {
+        name: stringValue(record.name),
+        description: stringValue(record.description, "Task"),
+        project: stringValue(record.project_name),
+        estimatedTime: stringValue(record.estimated_time),
+        active: boolValue(record.is_active),
+        days,
+      },
+    ];
+  });
+  const active = templates.filter((row) => row.active).length;
+  return {
+    summary: `${templates.length} recurring templates, ${active} active.`,
+    count: templates.length,
+    active,
+    inactive: templates.length - active,
+    statusChart: {
+      labels: ["Active", "Inactive"],
+      values: [active, templates.length - active],
+    },
+    rows: templates,
+  };
+}
+
+export function summarizeAdditional(result: JsonRecord) {
+  const entries = asArray(result.entries).map((row) => {
+    const record = asRecord(row) ?? {};
+    const hours = parseHours(record.hours_spent);
+    return {
+      name: stringValue(record.name),
+      date: stringValue(record.work_date).slice(0, 10),
+      project: stringValue(record.project_name),
+      hours,
+      hoursLabel: stringValue(record.hours_spent, hours ? `${hours.toFixed(1)}h` : ""),
+      description: stringValue(record.description, "Additional work"),
+      remarks: stringValue(record.remarks),
+      status: stringValue(record.status),
+    };
+  });
+  const byDate = new Map<string, number>();
+  for (const entry of [...entries].reverse()) {
+    byDate.set(entry.date, (byDate.get(entry.date) ?? 0) + entry.hours);
+  }
+  const totalHours = numberValue(result.total_hours, entries.reduce((sum, row) => sum + row.hours, 0));
+  return {
+    summary: `${entries.length} additional-work rows, ${totalHours}h on this page.`,
+    totalHours,
+    hasMore: boolValue(result.has_more),
+    hoursChart: {
+      labels: [...byDate.keys()],
+      values: [...byDate.values()],
+    },
+    entries,
+  };
+}
+
+export function summarizeDay(detail: JsonRecord, employee = "Employee") {
+  const date = stringValue(detail.date).slice(0, 10);
+  const morning = asRecord(detail.morning_log) ?? {};
+  const eod = asRecord(detail.eod_log) ?? {};
+  const tasks = tasksFromDetail(detail);
+  const done = tasks.filter((task) => task.status === "Done").length;
+  const pending = tasks.filter((task) => task.status === "Pending").length;
+  const inProgress = tasks.filter((task) => task.status === "In Progress").length;
+  const rolled = tasks.filter((task) => task.status === "Rolled Over").length;
+  const dropped = tasks.filter((task) => task.status === "Dropped").length;
+  const hours = parseHours(eod.net_hours);
+  const login = stringValue(morning.login_time);
+  const logout = stringValue(eod.logout_time);
+  return {
+    summary: `${employee} on ${date}: ${hours.toFixed(1)}h, ${done}/${tasks.length} tasks done.`,
+    date,
+    employeeName: employee,
+    login,
+    logout,
+    hours,
+    late: boolValue(morning.is_late),
+    taskCounts: {
+      total: tasks.length,
+      done,
+      pending,
+      inProgress,
+      rolled,
+      dropped,
+    },
+    statusChart: {
+      labels: ["Done", "Pending", "In Progress", "Rolled Over", "Dropped"],
+      values: [done, pending, inProgress, rolled, dropped],
+    },
+    hoursChart: {
+      labels: ["Hours"],
+      values: [hours],
+    },
+    tasks,
   };
 }
 
