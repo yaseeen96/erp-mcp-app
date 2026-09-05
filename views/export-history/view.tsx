@@ -1,4 +1,5 @@
 import { ModelContext, useOpenExternal, useToolContext } from "mcp-use/react";
+import { saveExportedFile } from "../_shared/download.js";
 import {
   AppShell,
   Card,
@@ -33,14 +34,14 @@ export default function ExportHistoryView() {
     <AppShell kicker="Export" title="Files ready" subtitle={view.toolOutput.summary}>
       <ModelContext content={`Export ready: ${files.map((file) => file.name).join(", ")}`} />
       <Card title="Download">
-        <p className={tw.sub}>Click a button. The file opens in a new tab so the Inspector iframe cannot block it.</p>
+        <p className={tw.sub}>Click a button to download the file.</p>
         <div className={`${tw.actions} mt-3`}>
           {files.map((file) => (
             <button
               key={file.name}
               type="button"
               className={tw.btnPrimary}
-              onClick={() => void openExternal({ url: file.url })}
+              onClick={() => void saveExportedFile(file, openExternal)}
             >
               Download {file.name.endsWith(".pdf") ? "PDF" : "Excel"}
             </button>

@@ -47,6 +47,7 @@ export function mountExportDownloads<TUser>(server: MCPServer<TUser>): void {
         "Content-Type": file.mimeType,
         "Content-Disposition": `attachment; filename="${file.name.replaceAll('"', "")}"`,
         "Cache-Control": "no-store",
+        "Access-Control-Allow-Origin": "*",
       },
     });
   });

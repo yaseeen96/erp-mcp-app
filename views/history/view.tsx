@@ -1,6 +1,7 @@
 import { ModelContext, useCallTool, useOpenExternal, useToolContext, useViewState } from "mcp-use/react";
 import { useState } from "react";
 import { GroupedBar, SmartHoursChart } from "../_shared/charts.js";
+import { saveExportedFile } from "../_shared/download.js";
 import { TopicBar, wantsTopic } from "../_shared/topics.js";
 import {
   AppShell,
@@ -30,6 +31,7 @@ export default function HistoryView() {
     topics: view.toolInput?.topics ?? [],
   });
   const [selectedDate, setSelectedDate] = useState(state.date);
+  const [exportError, setExportError] = useState("");
   const topics = state.topics.length ? state.topics : undefined;
   const showHours = wantsTopic(topics, "hours") || wantsTopic(topics, "days");
   const showTasks = wantsTopic(topics, "tasks");
@@ -102,14 +104,17 @@ export default function HistoryView() {
             className={tw.btn}
             disabled={exportTool.isPending}
             onClick={() => {
+              setExportError("");
               void exportTool
                 .callTool({ format: "xlsx", page: state.page, topics })
-                .then((result) => {
+                .then(async (result) => {
                   for (const file of result.structuredContent.files) {
-                    void openExternal({ url: file.url });
+                    await saveExportedFile(file, openExternal);
                   }
                 })
-                .catch(() => {});
+                .catch((error: unknown) => {
+                  setExportError(error instanceof Error ? error.message : "Excel export failed.");
+                });
             }}
           >
             {exportTool.isPending ? "Exporting…" : "Excel"}
@@ -119,14 +124,17 @@ export default function HistoryView() {
             className={tw.btn}
             disabled={exportTool.isPending}
             onClick={() => {
+              setExportError("");
               void exportTool
                 .callTool({ format: "pdf", page: state.page, topics })
-                .then((result) => {
+                .then(async (result) => {
                   for (const file of result.structuredContent.files) {
-                    void openExternal({ url: file.url });
+                    await saveExportedFile(file, openExternal);
                   }
                 })
-                .catch(() => {});
+                .catch((error: unknown) => {
+                  setExportError(error instanceof Error ? error.message : "PDF export failed.");
+                });
             }}
           >
             PDF
@@ -238,6 +246,7 @@ export default function HistoryView() {
         </Card>
       ) : null}
       {exportTool.error ? <ErrorState message={exportTool.error.message} /> : null}
+      {exportError ? <ErrorState message={exportError} /> : null}
     </AppShell>
   );
 }
