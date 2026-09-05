@@ -224,17 +224,14 @@ export function summarizeHistory(
     };
   });
   const latest = days[0];
-  const work = days
-    .filter((day) => day.tasks.length)
-    .map((day) => `${day.date}: ${day.tasks.map((task) => task.description).join("; ")}`)
-    .join(" | ");
+  const totalHours = days.reduce((sum, day) => sum + day.hours, 0);
+  const totalDone = days.reduce((sum, day) => sum + day.done, 0);
+  const totalTasks = days.reduce((sum, day) => sum + day.total, 0);
 
   return {
     summary: latest
-      ? work
-        ? `${employee} last ${days.length} days — ${work}`
-        : `${employee}: latest ${latest.date} ${latest.hours.toFixed(1)}h, ${latest.done}/${latest.total} tasks. ${logs.length} days loaded.`
-      : `${employee}: no attendance history yet.`,
+      ? `${days.length} days · ${totalHours.toFixed(1)}h · ${totalDone}/${totalTasks} tasks`
+      : "No attendance history yet.",
     employeeName: employee,
     hasMore: boolValue(history.has_more),
     days,

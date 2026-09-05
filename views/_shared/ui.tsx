@@ -52,15 +52,19 @@ export function AppShell({
         data-theme={theme}
         className="box-border min-h-dvh bg-[var(--st-bg,#ffffff)] px-5 pb-7 pt-14 font-[Inter,ui-sans-serif,system-ui,sans-serif] text-[var(--st-text)] [&_*]:box-border"
       >
-        <header className="mb-4 flex items-start justify-between gap-4 max-md:block">
+        <header className="mb-4">
           <div>
             <p className="mb-1 text-[11px] font-semibold uppercase tracking-[0.08em] text-[#EE1C29]">
               {kicker}
             </p>
             <h1 className="m-0 text-[22px] font-bold leading-tight text-[var(--st-title)]">{title}</h1>
-            {subtitle ? <p className={tw.sub}>{subtitle}</p> : null}
+            {subtitle ? (
+              <p className={`${tw.sub} line-clamp-3`} title={subtitle}>
+                {subtitle}
+              </p>
+            ) : null}
           </div>
-          {actions}
+          {actions ? <div className="mt-3">{actions}</div> : null}
         </header>
         <div className="flex flex-col gap-4">{children}</div>
       </div>
