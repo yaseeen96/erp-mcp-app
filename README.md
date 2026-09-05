@@ -15,7 +15,7 @@ Open [http://localhost:3000/mcp/inspector](http://localhost:3000/mcp/inspector).
 
 Desk → OAuth Client **ST Attendance MCP**. Redirect URIs and scopes must each be on **one line**, space-separated (newlines do not match):
 
-`http://localhost:3000/mcp/inspector/oauth/callback https://attendance.mcp.standardtouch.com/mcp/inspector/oauth/callback https://inspector.manufact.com/inspector/oauth/callback`
+`http://localhost:3000/mcp/inspector/oauth/callback https://attendance.mcp.standardtouch.com/mcp/inspector/oauth/callback https://inspector.manufact.com/inspector/oauth/callback https://chatgpt.com/connector/oauth/nCDGjbkwhCLX https://claude.ai/api/mcp/auth_callback https://claude.com/api/mcp/auth_callback`
 
 Default Redirect URI (separate field, one URL): `https://attendance.mcp.standardtouch.com/mcp/inspector/oauth/callback`
 
