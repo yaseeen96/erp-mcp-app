@@ -646,7 +646,7 @@ export function registerAttendanceReadTools(server: MCPServer<FrappeUser> | MCPS
       name: "show-day",
       title: "Show day",
       description:
-        "One personal date. Use this only when they name a single date. For a range or 'last week', call show-history once instead. Omit topics for the full day UI.",
+        "On-screen view of one personal date. Use only when they want to see that day, not when they asked for a PDF, Excel, export, or download — that is export-history with date. For a range or last week, call show-history once. Omit topics for the full day UI.",
       inputSchema: z.object({
         date: z.string().describe("Date YYYY-MM-DD"),
         topics: dayTopics,
@@ -798,7 +798,7 @@ export function registerAttendanceReadTools(server: MCPServer<FrappeUser> | MCPS
     format: z
       .enum(["xlsx", "pdf", "both"])
       .optional()
-      .describe("File type. Default both."),
+      .describe("pdf if they said PDF or only said export/file. xlsx if they said Excel. both only if they asked for both. Default pdf."),
     topics: z
       .array(z.enum(["days", "hours", "tasks", "attendance"]))
       .optional()
@@ -833,7 +833,7 @@ export function registerAttendanceReadTools(server: MCPServer<FrappeUser> | MCPS
     ctx: unknown
   ) {
     const data = await loadHistoryExport(ctx as AttendanceCtx, { page, date });
-    const wanted = format ?? "both";
+    const wanted = format ?? "pdf";
     const built = await Promise.all([
       ...(wanted === "pdf" ? [] : [buildHistoryExcel(data.employeeName, data.days, topics)]),
       ...(wanted === "xlsx" ? [] : [buildHistoryPdf(data.employeeName, data.days, topics)]),
@@ -886,7 +886,7 @@ export function registerAttendanceReadTools(server: MCPServer<FrappeUser> | MCPS
       name: "export-history",
       title: "Export history",
       description:
-        "Download Excel and/or PDF. If they name one day, pass date as YYYY-MM-DD (that file is only that day). If they only want a file, call this once and do not also call show-history. Omit topics for the full report.",
+        "The only tool for a PDF or Excel file. Call this once and do not also call show-day, show-history, or get-export. Named day → date=YYYY-MM-DD (file is only that day). They said PDF or just export → format=pdf. Excel → format=xlsx. Omit topics unless they named a slice.",
       inputSchema: exportInput,
       outputSchema: exportOutput,
       view: {
