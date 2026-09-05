@@ -56,7 +56,7 @@ export function summarizeToday(page: JsonRecord) {
   ];
 
   return {
-    summary: `${employee} is ${status} on ${stringValue(page.date)}. ${done}/${tasks.length} tasks done${projectNames.length ? `. Projects: ${projectNames.join(", ")}` : ""}.`,
+    summary: `${status} · ${done}/${tasks.length} tasks`,
     date: stringValue(page.date),
     employeeName: employee,
     morningDone,
@@ -110,7 +110,7 @@ export function summarizeTeam(board: JsonRecord) {
   });
 
   return {
-    summary: `Team ${stringValue(board.date)}: ${people.map((row) => row.name).join(", ") || "no reports"}. ${checkedIn} in, ${late} late, ${missing} missing, ${onLeave} on leave, ${eodDone} EOD.`,
+    summary: `${stringValue(board.date)} · ${checkedIn} in · ${late} late · ${missing} missing`,
     date: stringValue(board.date),
     kpis: {
       total: numberValue(summary.total, employees.length),
@@ -148,7 +148,7 @@ export function summarizeManagement(board: JsonRecord) {
   });
 
   return {
-    summary: `Company ${stringValue(board.date)}: ${numberValue(summary.checked_in)}/${numberValue(summary.total)} checked in, ${numberValue(summary.missing)} missing, ${numberValue(summary.on_leave)} on leave.`,
+    summary: `${stringValue(board.date)} · ${numberValue(summary.checked_in)}/${numberValue(summary.total)} in · ${numberValue(summary.missing)} missing`,
     date: stringValue(board.date),
     kpis: {
       total: numberValue(summary.total),
@@ -339,7 +339,7 @@ export function summarizeDay(detail: JsonRecord, employee = "Employee") {
   const login = stringValue(morning.login_time);
   const logout = stringValue(eod.logout_time);
   return {
-    summary: `${employee} on ${date}: ${hours.toFixed(1)}h, ${done}/${tasks.length} tasks done.`,
+    summary: `${date} · ${hours.toFixed(1)}h · ${done}/${tasks.length} tasks`,
     date,
     employeeName: employee,
     login,
