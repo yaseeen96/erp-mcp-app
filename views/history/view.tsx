@@ -22,8 +22,7 @@ const historyTopics = ["days", "hours", "tasks", "attendance"] as const;
 export default function HistoryView() {
   const view = useToolContext<"show-history">();
   const historyTool = useCallTool("get-history");
-  const dayTool = useCallTool("get-history-day");
-  const exportTool = useCallTool("export-history");
+  const exportTool = useCallTool("get-export");
   const openExternal = useOpenExternal();
   const [state, setState] = useViewState({
     page: view.toolInput?.page ?? 0,
@@ -44,8 +43,11 @@ export default function HistoryView() {
     historyTool.data?._meta?.history ?? (view.status === "ready" ? view.meta?.history : undefined)
   );
   const logs = asArray(history?.logs);
-  const day = asRecord(dayTool.data?._meta?.detail);
-  const dayTasks = asArray(day?.tasks);
+  const days = output?.days ?? [];
+  const selectedTasks = days.find((day) => day.date.slice(0, 10) === selectedDate.slice(0, 10))?.tasks ?? [];
+  const lateDates = new Set(
+    logs.filter((log) => log.is_late).map((log) => text(log.date, "").slice(0, 10))
+  );
 
   if (view.status === "pending" && !output) {
     return (
@@ -183,27 +185,25 @@ export default function HistoryView() {
             </tr>
           </thead>
           <tbody>
-            {logs.map((log) => (
-              <tr key={text(log.date)}>
+            {days.map((day) => (
+              <tr key={day.date}>
                 <td>
-                  {text(log.date)}{" "}
-                  {log.is_late ? <Pill tone="warn">Late</Pill> : null}
+                  {day.date}{" "}
+                  {lateDates.has(day.date.slice(0, 10)) ? <Pill tone="warn">Late</Pill> : null}
                 </td>
-                <td>{text(log.login_time)}</td>
-                <td>{text(log.logout_time)}</td>
-                <td>{text(log.net_hours)}</td>
+                <td>{day.login || "—"}</td>
+                <td>{day.logout || "—"}</td>
+                <td>{day.hours.toFixed(1)}h</td>
                 <td>
-                  {text(log.done_tasks, "0")}/{text(log.total_tasks, "0")}
+                  {day.done}/{day.total}
                 </td>
                 <td>
                   <button
                     type="button"
                     className={tw.btn}
                     onClick={() => {
-                      const date = text(log.date, "");
-                      setSelectedDate(date);
-                      setState({ ...state, date });
-                      void dayTool.callTool({ date }).catch(() => {});
+                      setSelectedDate(day.date);
+                      setState({ ...state, date: day.date });
                     }}
                   >
                     Details
@@ -217,9 +217,7 @@ export default function HistoryView() {
       ) : null}
       {selectedDate ? (
         <Card title={`Detail · ${selectedDate}`}>
-          {dayTool.isPending ? <PendingState label="Loading day…" /> : null}
-          {dayTool.error ? <ErrorState message={dayTool.error.message} /> : null}
-          {dayTasks.length ? (
+          {selectedTasks.length ? (
             <table className={tw.table}>
               <thead>
                 <tr>
@@ -229,20 +227,20 @@ export default function HistoryView() {
                 </tr>
               </thead>
               <tbody>
-                {dayTasks.map((task) => (
-                  <tr key={text(task.name)}>
-                    <td>{text(task.description)}</td>
+                {selectedTasks.map((task) => (
+                  <tr key={`${task.description}-${task.status}-${task.project}`}>
+                    <td>{task.description}</td>
                     <td>
-                      <Pill tone={statusTone(text(task.status))}>{text(task.status)}</Pill>
+                      <Pill tone={statusTone(task.status)}>{task.status}</Pill>
                     </td>
-                    <td>{text(task.actual_time)}</td>
+                    <td>{task.actualTime || "—"}</td>
                   </tr>
                 ))}
               </tbody>
             </table>
-          ) : !dayTool.isPending ? (
-            <p className={tw.empty}>Select a day to inspect tasks.</p>
-          ) : null}
+          ) : (
+            <p className={tw.empty}>No tasks recorded for this day.</p>
+          )}
         </Card>
       ) : null}
       {exportTool.error ? <ErrorState message={exportTool.error.message} /> : null}

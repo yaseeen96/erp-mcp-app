@@ -50,6 +50,7 @@ export const getManagementDashboard = readTools.getManagementBoard;
 export const getEmployeeDay = readTools.getEmployeeDay;
 export const getHistory = readTools.getHistory;
 export const getHistoryDay = readTools.getHistoryDay;
+export const getExport = readTools.getExport;
 export const exportHistory = readTools.exportHistory;
 export const listProjects = readTools.listProjects;
 export const listRecurringTasks = readTools.listRecurring;

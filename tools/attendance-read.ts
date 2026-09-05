@@ -777,36 +777,93 @@ export function registerAttendanceReadTools(server: MCPServer<FrappeUser> | MCPS
     }
   );
 
+  const exportInput = z.object({
+    format: z
+      .enum(["xlsx", "pdf", "both"])
+      .optional()
+      .describe("File type. Default both."),
+    topics: z
+      .array(z.enum(["days", "hours", "tasks", "attendance"]))
+      .optional()
+      .describe(
+        "Omit for the full branded report. days=how many days worked. hours=hours and time. tasks=what they worked on. attendance=daily in/out table."
+      ),
+    page: z.number().int().min(0).optional().describe("0-based history page. Default 0."),
+  });
+  const exportOutput = z.object({
+    summary: z.string(),
+    files: z.array(
+      z.object({
+        name: z.string(),
+        mimeType: z.string(),
+        base64: z.string(),
+        url: z.string(),
+      })
+    ),
+  });
+
+  async function runExport(
+    format: "xlsx" | "pdf" | "both" | undefined,
+    topics: Array<"days" | "hours" | "tasks" | "attendance"> | undefined,
+    page: number | undefined,
+    ctx: unknown
+  ) {
+    const { data } = await loadHistoryPage(ctx as AttendanceCtx, page ?? 0);
+    const wanted = format ?? "both";
+    const built = await Promise.all([
+      ...(wanted === "pdf" ? [] : [buildHistoryExcel(data.employeeName, data.days, topics)]),
+      ...(wanted === "xlsx" ? [] : [buildHistoryPdf(data.employeeName, data.days, topics)]),
+    ]);
+    const files = built.map(storeExportFile);
+    return {
+      content: [
+        {
+          type: "text" as const,
+          text: `Files are ready. ${files.map((file) => file.name).join(" and ")}.`,
+        },
+        ...files.map((file) => ({
+          type: "resource" as const,
+          resource: {
+            uri: `attendance://export/${file.name}`,
+            mimeType: file.mimeType,
+            blob: file.base64,
+          },
+        })),
+      ],
+      structuredContent: {
+        summary: `Exported ${files.map((file) => file.name).join(" and ")} for ${data.employeeName}${topics?.length ? ` (${topics.join(", ")})` : ""}.`,
+        files,
+      },
+    };
+  }
+
+  const getExport = server.tool(
+    {
+      name: "get-export",
+      title: "Get export files",
+      description: "View helper: build Excel/PDF bytes. Models must use export-history instead.",
+      visibility: "app",
+      inputSchema: exportInput,
+      outputSchema: exportOutput,
+      annotations: { readOnlyHint: true, destructiveHint: false, openWorldHint: true },
+    },
+    async ({ format, topics, page }, ctx) => {
+      try {
+        return await runExport(format, topics, page, ctx);
+      } catch (error) {
+        return frappeFailure(error);
+      }
+    }
+  );
+
   const exportHistory = server.tool(
     {
       name: "export-history",
       title: "Export history",
       description:
         "Download Excel and/or PDF. If they only want a file, call this once and do not also call show-history. Omit topics for the full report.",
-      inputSchema: z.object({
-        format: z
-          .enum(["xlsx", "pdf", "both"])
-          .optional()
-          .describe("File type. Default both."),
-        topics: z
-          .array(z.enum(["days", "hours", "tasks", "attendance"]))
-          .optional()
-          .describe(
-            "Omit for the full branded report. days=how many days worked. hours=hours and time. tasks=what they worked on. attendance=daily in/out table."
-          ),
-        page: z.number().int().min(0).optional().describe("0-based history page. Default 0."),
-      }),
-      outputSchema: z.object({
-        summary: z.string(),
-        files: z.array(
-          z.object({
-            name: z.string(),
-            mimeType: z.string(),
-            base64: z.string(),
-            url: z.string(),
-          })
-        ),
-      }),
+      inputSchema: exportInput,
+      outputSchema: exportOutput,
       view: {
         name: "export-history",
         description: "Download Excel and PDF attendance files",
@@ -817,33 +874,7 @@ export function registerAttendanceReadTools(server: MCPServer<FrappeUser> | MCPS
     },
     async ({ format, topics, page }, ctx) => {
       try {
-        const { data } = await loadHistoryPage(ctx as AttendanceCtx, page ?? 0);
-        const wanted = format ?? "both";
-        const built = await Promise.all([
-          ...(wanted === "pdf" ? [] : [buildHistoryExcel(data.employeeName, data.days, topics)]),
-          ...(wanted === "xlsx" ? [] : [buildHistoryPdf(data.employeeName, data.days, topics)]),
-        ]);
-        const files = built.map(storeExportFile);
-        return {
-          content: [
-            {
-              type: "text",
-              text: `Files are in the download card below. Click Download PDF or Download Excel. ${files.map((file) => file.name).join(" and ")}.`,
-            },
-            ...files.map((file) => ({
-              type: "resource" as const,
-              resource: {
-                uri: `attendance://export/${file.name}`,
-                mimeType: file.mimeType,
-                blob: file.base64,
-              },
-            })),
-          ],
-          structuredContent: {
-            summary: `Exported ${files.map((file) => file.name).join(" and ")} for ${data.employeeName}${topics?.length ? ` (${topics.join(", ")})` : ""}.`,
-            files,
-          },
-        };
+        return await runExport(format, topics, page, ctx);
       } catch (error) {
         return frappeFailure(error);
       }
@@ -860,6 +891,7 @@ export function registerAttendanceReadTools(server: MCPServer<FrappeUser> | MCPS
     listProjects,
     listRecurring,
     listAdditional,
+    getExport,
     exportHistory,
     showToday,
     showTeamBoard,
