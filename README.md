@@ -15,7 +15,7 @@ Open [http://localhost:3000/mcp/inspector](http://localhost:3000/mcp/inspector).
 
 Desk → OAuth Client **ST Attendance MCP**. Redirect URIs and scopes must each be on **one line**, space-separated (newlines do not match):
 
-`http://localhost:3000/mcp/inspector/oauth/callback https://attendance.mcp.standardtouch.com/mcp/inspector/oauth/callback https://inspector.manufact.com/inspector/oauth/callback https://chatgpt.com/connector/oauth/nCDGjbkwhCLX https://claude.ai/api/mcp/auth_callback https://claude.com/api/mcp/auth_callback`
+`http://localhost:3000/mcp/inspector/oauth/callback https://attendance.mcp.standardtouch.com/mcp/inspector/oauth/callback https://inspector.manufact.com/inspector/oauth/callback https://chatgpt.com/connector/oauth/nCDGjbkwhCLX https://claude.ai/api/mcp/auth_callback https://claude.com/api/mcp/auth_callback https://antigravity.google/oauth-callback https://www.cursor.com/agents/mcp/oauth/callback http://localhost:8787/callback http://127.0.0.1:8787/callback cursor://anysphere.cursor-mcp/oauth/callback https://vscode.dev/redirect https://insiders.vscode.dev/redirect http://127.0.0.1:33418 http://127.0.0.1:33418/ http://localhost:33418 http://localhost:33418/`
 
 Default Redirect URI (separate field, one URL): `https://attendance.mcp.standardtouch.com/mcp/inspector/oauth/callback`
 
