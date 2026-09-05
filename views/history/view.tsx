@@ -73,30 +73,34 @@ export default function HistoryView() {
             labels={{ days: "Days", hours: "Hours", tasks: "Tasks", attendance: "Attendance" }}
             onChange={(next) => setState({ ...state, topics: next ?? [] })}
           />
-          <button
-            type="button"
-            className={tw.btn}
-            disabled={historyTool.isPending || state.page <= 0}
-            onClick={() => {
-              const page = Math.max(0, state.page - 1);
-              setState({ ...state, page });
-              void historyTool.callTool({ page }).catch(() => {});
-            }}
-          >
-            Newer
-          </button>
-          <button
-            type="button"
-            className={tw.btn}
-            disabled={historyTool.isPending || !output?.hasMore}
-            onClick={() => {
-              const page = state.page + 1;
-              setState({ ...state, page });
-              void historyTool.callTool({ page }).catch(() => {});
-            }}
-          >
-            Older
-          </button>
+          {output?.from ? null : (
+            <>
+              <button
+                type="button"
+                className={tw.btn}
+                disabled={historyTool.isPending || state.page <= 0}
+                onClick={() => {
+                  const page = Math.max(0, state.page - 1);
+                  setState({ ...state, page });
+                  void historyTool.callTool({ page }).catch(() => {});
+                }}
+              >
+                Newer
+              </button>
+              <button
+                type="button"
+                className={tw.btn}
+                disabled={historyTool.isPending || !output?.hasMore}
+                onClick={() => {
+                  const page = state.page + 1;
+                  setState({ ...state, page });
+                  void historyTool.callTool({ page }).catch(() => {});
+                }}
+              >
+                Older
+              </button>
+            </>
+          )}
           <SiteLink path="/my-history" label="Open ERPNext" />
         </div>
       }
@@ -144,6 +148,7 @@ export default function HistoryView() {
             {days.map((day) => (
               <tr key={day.date}>
                 <td>
+                  {day.weekday ? `${day.weekday} ` : ""}
                   {day.date}{" "}
                   {lateDates.has(day.date.slice(0, 10)) ? <Pill tone="warn">Late</Pill> : null}
                 </td>

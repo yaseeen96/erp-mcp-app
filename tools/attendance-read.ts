@@ -3,7 +3,9 @@ import { z } from "zod";
 import * as attendance from "../lib/attendance.js";
 import { buildHistoryExcel, buildHistoryPdf } from "../lib/export-files.js";
 import { storeExportFile } from "../lib/export-store.js";
-import { loadHistoryExport, loadHistoryPage } from "../lib/history-data.js";
+import { hasDateFilter, resolveSingleDate } from "../lib/calendar.js";
+import { loadEmployeeHistory } from "../lib/employee-range.js";
+import { loadHistoryExport, loadHistoryPage, loadHistoryRange } from "../lib/history-data.js";
 import { loadProjects } from "../lib/projects.js";
 import { resolveWorkLocationConfig } from "../lib/work-location.js";
 import { ok } from "../lib/result.js";
@@ -27,9 +29,49 @@ const dateInput = z.object({
   date: z.string().optional().describe("Attendance date YYYY-MM-DD. Defaults to today."),
 });
 
+const calendarOutput = z.object({
+  today: z.string(),
+  weekday: z.string(),
+  weekdayLong: z.string(),
+  weekStart: z.string(),
+  weekEnd: z.string(),
+  month: z.string(),
+  monthStart: z.string(),
+  monthEnd: z.string(),
+  timezone: z.string(),
+});
+
+const whenInput = z
+  .string()
+  .optional()
+  .describe(
+    "Pass their date words unchanged. Examples: today, yesterday, this week, last week, this month, last month, August, 1 September, 18/08/2026, last 7 days. Do not convert to ISO or guess weekdays. Asia/Kolkata. Weeks Mon–Sun. Dates are DD/MM/YYYY."
+  );
+
+const periodInput = z
+  .enum(["today", "yesterday", "this_week", "last_week", "this_month", "last_month"])
+  .optional()
+  .describe("Only if they used these exact words. Prefer when.");
+
+const monthInput = z
+  .string()
+  .optional()
+  .describe("Calendar month YYYY-MM, e.g. 2026-08 for August. Prefer when='August'.");
+
+const dateFilterFields = {
+  when: whenInput,
+  date: z.string().optional().describe("One day YYYY-MM-DD only if they already gave ISO."),
+  month: monthInput,
+  period: periodInput,
+  from: z.string().optional().describe("Range start YYYY-MM-DD. Use with to. Prefer when."),
+  to: z.string().optional().describe("Range end YYYY-MM-DD. Use with from. Prefer when."),
+};
+
 const todayOutput = z.object({
   summary: z.string(),
   date: z.string(),
+  weekday: z.string(),
+  calendar: calendarOutput,
   employeeName: z.string(),
   morningDone: z.boolean(),
   eodDone: z.boolean(),
@@ -179,6 +221,7 @@ const historyTopics = z
 const dayOutput = z.object({
   summary: z.string(),
   date: z.string(),
+  weekday: z.string(),
   employeeName: z.string(),
   login: z.string(),
   logout: z.string(),
@@ -275,21 +318,28 @@ const additionalOutput = z.object({
   ),
 });
 
+const historyDay = z.object({
+  date: z.string(),
+  weekday: z.string(),
+  hours: z.number(),
+  login: z.string(),
+  logout: z.string(),
+  done: z.number(),
+  total: z.number(),
+  tasks: z.array(historyTask),
+  attended: z.boolean().optional(),
+});
+
 const historyOutput = z.object({
   summary: z.string(),
   employeeName: z.string(),
   hasMore: z.boolean(),
-  days: z.array(
-    z.object({
-      date: z.string(),
-      hours: z.number(),
-      login: z.string(),
-      logout: z.string(),
-      done: z.number(),
-      total: z.number(),
-      tasks: z.array(historyTask),
-    })
-  ),
+  from: z.string().optional(),
+  to: z.string().optional(),
+  period: z.string().optional(),
+  attendedDays: z.number().optional(),
+  calendar: calendarOutput.optional(),
+  days: z.array(historyDay),
   hoursChart: z.object({
     labels: z.array(z.string()),
     values: z.array(z.number()),
@@ -299,6 +349,22 @@ const historyOutput = z.object({
     done: z.array(z.number()),
     total: z.array(z.number()),
   }),
+});
+
+const employeeHistoryOutput = historyOutput.extend({
+  employeeId: z.string(),
+  from: z.string(),
+  to: z.string(),
+  period: z.string(),
+  attendedDays: z.number(),
+  projectNames: z.array(z.string()),
+  calendar: calendarOutput,
+  days: z.array(
+    historyDay.extend({
+      attended: z.boolean(),
+      status: z.enum(["checked_out", "checked_in", "absent"]),
+    })
+  ),
 });
 
 const viewCsp = {
@@ -409,6 +475,37 @@ export function registerAttendanceReadTools(server: MCPServer<FrappeUser> | MCPS
     }
   );
 
+  const getEmployeeHistory = server.tool(
+    {
+      name: "get-employee-history",
+      title: "Get employee history",
+      description: "View helper: teammate week/range. Models must use show-employee-history instead.",
+      visibility: "app",
+      inputSchema: z.object({
+        employeeName: z.string().describe("Teammate name or Employee ID, e.g. Maaz or HR-EMP-00001."),
+        ...dateFilterFields,
+      }),
+      outputSchema: employeeHistoryOutput,
+      annotations: { readOnlyHint: true, destructiveHint: false, openWorldHint: true },
+    },
+    async ({ employeeName, when, date, month, period, from, to }, ctx) => {
+      try {
+        const data = await loadEmployeeHistory(ctx as AttendanceCtx, {
+          employeeName,
+          when,
+          date,
+          month,
+          period,
+          from,
+          to,
+        });
+        return ok(data.summary, data);
+      } catch (error) {
+        return frappeFailure(error);
+      }
+    }
+  );
+
   const getHistory = server.tool(
     {
       name: "get-history",
@@ -416,13 +513,19 @@ export function registerAttendanceReadTools(server: MCPServer<FrappeUser> | MCPS
       description: "View helper: reload history with task titles. Models must use show-history instead.",
       visibility: "app",
       inputSchema: z.object({
-        page: z.number().int().min(0).optional().describe("0-based page of 15 days. Default 0 (most recent)."),
+        page: z.number().int().min(0).optional().describe("0-based page of 15 days. Default 0. Ignored when a date filter is set."),
+        ...dateFilterFields,
       }),
       outputSchema: historyOutput,
       annotations: { readOnlyHint: true, destructiveHint: false, openWorldHint: true },
     },
-    async ({ page }, ctx) => {
+    async ({ page, when, date, month, period, from, to }, ctx) => {
       try {
+        const filter = { when, date, month, period, from, to };
+        if (hasDateFilter(filter)) {
+          const { data } = await loadHistoryRange(ctx as AttendanceCtx, filter);
+          return ok(data.summary, data);
+        }
         const { history, data } = await loadHistoryPage(ctx as AttendanceCtx, page ?? 0);
         return ok(data.summary, data, { history });
       } catch (error) {
@@ -532,7 +635,7 @@ export function registerAttendanceReadTools(server: MCPServer<FrappeUser> | MCPS
       name: "show-today",
       title: "Show today",
       description:
-        "Today's status, submitted tasks, and planned (not yet punched) work. Does not add tasks or check in. To save projects/tasks without punching, call add-tasks. To punch, call check-in only when they asked. One call is enough — do not also call get-today or show-projects. Omit topics for the full workspace.",
+        "Today's status in Asia/Kolkata, with weekday and this week's Monday–Sunday bounds. Does not add tasks or check in. One call is enough — do not also call get-today or show-projects.",
       inputSchema: z.object({
         topics: todayTopics,
       }),
@@ -617,9 +720,10 @@ export function registerAttendanceReadTools(server: MCPServer<FrappeUser> | MCPS
       name: "show-history",
       title: "Show history",
       description:
-        "Recent personal attendance, including each day's task titles. Use this for 'past week', 'what did I work on', or a history UI. One call is enough — do not also call get-history or loop show-day. Omit topics for the full UI.",
+        "Your attendance for a day, week, or month in one call. Pass when= their words (this week, August, yesterday, 1 September). Trust returned weekday fields — never invent dates. One call — do not loop show-day. For a teammate use show-employee-history.",
       inputSchema: z.object({
-        page: z.number().int().min(0).optional().describe("0-based page. Default 0."),
+        page: z.number().int().min(0).optional().describe("0-based page. Default 0. Ignored when a date filter is set."),
+        ...dateFilterFields,
         topics: historyTopics,
       }),
       outputSchema: historyOutput,
@@ -631,8 +735,13 @@ export function registerAttendanceReadTools(server: MCPServer<FrappeUser> | MCPS
       },
       annotations: { readOnlyHint: true, destructiveHint: false, openWorldHint: true },
     },
-    async ({ page }, ctx) => {
+    async ({ page, when, date, month, period, from, to }, ctx) => {
       try {
+        const filter = { when, date, month, period, from, to };
+        if (hasDateFilter(filter)) {
+          const { data } = await loadHistoryRange(ctx as AttendanceCtx, filter);
+          return ok(data.summary, data);
+        }
         const { history, data } = await loadHistoryPage(ctx as AttendanceCtx, page ?? 0);
         return ok(data.summary, data, { history });
       } catch (error) {
@@ -646,9 +755,10 @@ export function registerAttendanceReadTools(server: MCPServer<FrappeUser> | MCPS
       name: "show-day",
       title: "Show day",
       description:
-        "On-screen view of one personal date. Use only when they want to see that day, not when they asked for a PDF, Excel, export, or download — that is export-history with date. For a range or last week, call show-history once. Omit topics for the full day UI.",
+        "One personal date. Prefer when=yesterday or when='1 September' if they did not give ISO. For a week or month call show-history once. Never call this once per day. Export is export-history.",
       inputSchema: z.object({
-        date: z.string().describe("Date YYYY-MM-DD"),
+        date: z.string().optional().describe("YYYY-MM-DD if they gave ISO."),
+        when: whenInput,
         topics: dayTopics,
       }),
       outputSchema: dayOutput,
@@ -660,9 +770,10 @@ export function registerAttendanceReadTools(server: MCPServer<FrappeUser> | MCPS
       },
       annotations: { readOnlyHint: true, destructiveHint: false, openWorldHint: true },
     },
-    async ({ date }, ctx) => {
+    async ({ date, when }, ctx) => {
       try {
-        const detail = await attendance.getHistoryDayDetail(ctx as AttendanceCtx, date);
+        const resolved = resolveSingleDate({ date, when });
+        const detail = await attendance.getHistoryDayDetail(ctx as AttendanceCtx, resolved);
         const auth = (ctx as AttendanceCtx).auth?.user;
         const data = summarizeDay(detail, auth?.fullName || auth?.email || auth?.id || "Employee");
         return ok(data.summary, data, { detail });
@@ -677,10 +788,11 @@ export function registerAttendanceReadTools(server: MCPServer<FrappeUser> | MCPS
       name: "show-employee-day",
       title: "Show employee day",
       description:
-        "One team member's day. Team Leaders and HR only. One call is enough — do not also call get-employee-day. For the whole team, use show-team-board once instead of looping this.",
+        "One team member's single day. Prefer when='1 September' if they did not give ISO. For a week, month, or 'how many days did X attend': show-employee-history once — never loop this tool.",
       inputSchema: z.object({
-        employeeName: z.string().describe("Employee ID, e.g. HR-EMP-00001"),
-        date: z.string().optional().describe("Date YYYY-MM-DD. Defaults to today."),
+        employeeName: z.string().describe("Teammate name or Employee ID."),
+        date: z.string().optional().describe("YYYY-MM-DD if they gave ISO. Defaults to today."),
+        when: whenInput,
         topics: dayTopics,
       }),
       outputSchema: employeeDayOutput,
@@ -692,15 +804,54 @@ export function registerAttendanceReadTools(server: MCPServer<FrappeUser> | MCPS
       },
       annotations: { readOnlyHint: true, destructiveHint: false, openWorldHint: true },
     },
-    async ({ employeeName, date }, ctx) => {
+    async ({ employeeName, date, when }, ctx) => {
       try {
+        const resolved = date || when ? resolveSingleDate({ date, when }) : undefined;
         const detail = await attendance.getEmployeeTaskDetail(
           ctx as AttendanceCtx,
           employeeName,
-          date
+          resolved
         );
         const data = summarizeEmployeeDay(detail, employeeName);
         return ok(data.summary, data, { detail });
+      } catch (error) {
+        return frappeFailure(error);
+      }
+    }
+  );
+
+  const showEmployeeHistory = server.tool(
+    {
+      name: "show-employee-history",
+      title: "Show employee history",
+      description:
+        "One teammate's day, week, or month in a single call. Pass when= their words: this week, August, yesterday, 1 September. 'How many days did Maaz attend this week' → employeeName=Maaz, when='this week'. Trust returned weekdays — never invent dates or loop show-employee-day. Team Leaders and HR only.",
+      inputSchema: z.object({
+        employeeName: z.string().describe("Teammate name or Employee ID. Maaz → Maaz."),
+        ...dateFilterFields,
+        topics: historyTopics,
+      }),
+      outputSchema: employeeHistoryOutput,
+      view: {
+        name: "employee-history",
+        description: "Teammate attendance for a day, week, or month",
+        prefersBorder: false,
+        csp: viewCsp,
+      },
+      annotations: { readOnlyHint: true, destructiveHint: false, openWorldHint: true },
+    },
+    async ({ employeeName, when, date, month, period, from, to }, ctx) => {
+      try {
+        const data = await loadEmployeeHistory(ctx as AttendanceCtx, {
+          employeeName,
+          when,
+          date,
+          month,
+          period,
+          from,
+          to,
+        });
+        return ok(data.summary, data);
       } catch (error) {
         return frappeFailure(error);
       }
@@ -795,31 +946,18 @@ export function registerAttendanceReadTools(server: MCPServer<FrappeUser> | MCPS
   );
 
   const exportInput = z.object({
-    date: z
-      .string()
-      .optional()
-      .describe(
-        "One day as YYYY-MM-DD (18 August 2026 → 2026-08-18). For several days use from and to instead. Never claim this tool has no date filter."
-      ),
-    from: z
-      .string()
-      .optional()
-      .describe("Range start YYYY-MM-DD, inclusive. Use with to. 18–19 August 2026 → from=2026-08-18."),
-    to: z
-      .string()
-      .optional()
-      .describe("Range end YYYY-MM-DD, inclusive. Use with from. 18–19 August 2026 → to=2026-08-19."),
+    ...dateFilterFields,
     format: z
       .enum(["xlsx", "pdf", "both"])
       .optional()
-      .describe("xlsx and pdf both honor date/from/to. pdf if they said PDF. xlsx if they said Excel. both if they asked for both. If they said export but not the format, ask first."),
+      .describe("xlsx and pdf both honor the same date filter. pdf if they said PDF. xlsx if they said Excel. both if they asked for both. If they said export but not the format, ask first."),
     topics: z
       .array(z.enum(["days", "hours", "tasks", "attendance"]))
       .optional()
       .describe(
         "Omit for the full branded report. days=how many days worked. hours=hours and time. tasks=what they worked on. attendance=daily in/out table."
       ),
-    page: z.number().int().min(0).optional().describe("0-based history page. Default 0. Ignored when date, from, or to is set."),
+    page: z.number().int().min(0).optional().describe("0-based history page. Default 0. Ignored when a date filter is set."),
   });
   const exportOutput = z.object({
     summary: z.string(),
@@ -837,20 +975,25 @@ export function registerAttendanceReadTools(server: MCPServer<FrappeUser> | MCPS
     format: "xlsx" | "pdf" | "both" | undefined,
     topics: Array<"days" | "hours" | "tasks" | "attendance"> | undefined,
     page: number | undefined,
-    date: string | undefined,
-    from: string | undefined,
-    to: string | undefined,
+    filter: {
+      when?: string;
+      date?: string;
+      month?: string;
+      period?: "today" | "yesterday" | "this_week" | "last_week" | "this_month" | "last_month";
+      from?: string;
+      to?: string;
+    },
     ctx: unknown
   ) {
-    const data = await loadHistoryExport(ctx as AttendanceCtx, { page, date, from, to });
+    const data = await loadHistoryExport(ctx as AttendanceCtx, { page, ...filter });
     const wanted = format ?? "pdf";
     const built = await Promise.all([
       ...(wanted === "pdf" ? [] : [buildHistoryExcel(data.employeeName, data.days, topics)]),
       ...(wanted === "xlsx" ? [] : [buildHistoryPdf(data.employeeName, data.days, topics)]),
     ]);
     const files = built.map(storeExportFile);
-    const start = from || date;
-    const end = to || date;
+    const start = data.days[0]?.date;
+    const end = data.days.at(-1)?.date;
     const scope = start && end ? (start === end ? ` for ${start}` : ` for ${start} to ${end}`) : "";
     return {
       content: [
@@ -884,9 +1027,9 @@ export function registerAttendanceReadTools(server: MCPServer<FrappeUser> | MCPS
       outputSchema: exportOutput,
       annotations: { readOnlyHint: true, destructiveHint: false, openWorldHint: true },
     },
-    async ({ format, topics, page, date, from, to }, ctx) => {
+    async ({ format, topics, page, when, date, month, period, from, to }, ctx) => {
       try {
-        return await runExport(format, topics, page, date, from, to, ctx);
+        return await runExport(format, topics, page, { when, date, month, period, from, to }, ctx);
       } catch (error) {
         return frappeFailure(error);
       }
@@ -898,14 +1041,14 @@ export function registerAttendanceReadTools(server: MCPServer<FrappeUser> | MCPS
       name: "export-history",
       title: "Export PDF or Excel",
       description:
-        "Download one PDF and/or one Excel. date, from, and to apply to both formats. One day → date. Several days → from and to in one file (18–19 August Excel → from=2026-08-18, to=2026-08-19, format=xlsx). Call once. Do not export days separately or say Excel has no range. PDF → format=pdf. Excel → format=xlsx. Both files → format=both. If they said export but not which days or which format, ask instead of guessing.",
+        "Download one PDF and/or one Excel for a day, week, or month. Prefer when= their words (August, this week, 18 August). Same filter for both formats. Call once. Do not export days separately. PDF → format=pdf. Excel → format=xlsx. Both → format=both. If they said export but not which days or which format, ask first.",
       inputSchema: exportInput,
       outputSchema: exportOutput,
       annotations: { readOnlyHint: true, destructiveHint: false, openWorldHint: true },
     },
-    async ({ format, topics, page, date, from, to }, ctx) => {
+    async ({ format, topics, page, when, date, month, period, from, to }, ctx) => {
       try {
-        return await runExport(format, topics, page, date, from, to, ctx);
+        return await runExport(format, topics, page, { when, date, month, period, from, to }, ctx);
       } catch (error) {
         return frappeFailure(error);
       }
@@ -917,6 +1060,7 @@ export function registerAttendanceReadTools(server: MCPServer<FrappeUser> | MCPS
     getTeamBoard,
     getManagementBoard,
     getEmployeeDay,
+    getEmployeeHistory,
     getHistory,
     getHistoryDay,
     listProjects,
@@ -930,6 +1074,7 @@ export function registerAttendanceReadTools(server: MCPServer<FrappeUser> | MCPS
     showHistory,
     showDay,
     showEmployeeDay,
+    showEmployeeHistory,
     showRecurring,
     showAdditionalWork,
     showProjects,

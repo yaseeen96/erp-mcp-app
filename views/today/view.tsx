@@ -125,14 +125,17 @@ export default function TodayView() {
       }
     >
       <ModelContext
-        content={`Today ${output?.date ?? ""}: ${output?.employeeName ?? ""} ${
+        content={`Today ${output?.weekday ? `${output.weekday} ` : ""}${output?.date ?? ""}: ${output?.employeeName ?? ""} ${
           eodDone ? "checked out" : morningDone ? "checked in" : "not checked in"
         }. Tasks ${output?.taskCounts.done ?? 0}/${output?.taskCounts.total ?? 0}. Planned ${
           planned?.count ?? 0
         }${planned?.projectNames.length ? ` (${planned.projectNames.join(", ")})` : ""}.`}
       />
       <div className={tw.kpis}>
-        <Kpi label="Date" value={output?.date ?? "—"} />
+        <Kpi
+          label="Date"
+          value={output?.date ? `${output.weekday ? `${output.weekday} ` : ""}${output.date}` : "—"}
+        />
         <Kpi label="Status" value={eodDone ? "EOD" : morningDone ? "In" : "Out"} />
         {showHours ? <Kpi label="Login" value={output?.loginTime || "—"} /> : null}
         {showTasks ? (

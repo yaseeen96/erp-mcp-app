@@ -7,6 +7,7 @@ import { AppShell, Card, Kpi, Pill, SiteLink, asArray, asRecord, statusTone, tex
 export type DayDashboardData = {
   summary: string;
   date: string;
+  weekday?: string;
   employeeName: string;
   login: string;
   logout: string;
@@ -39,6 +40,7 @@ export function asDayDashboard(value: unknown): DayDashboardData | undefined {
   return {
     summary: text(record.summary, ""),
     date: record.date,
+    weekday: typeof record.weekday === "string" ? record.weekday : "",
     employeeName: record.employeeName,
     login: text(record.login, ""),
     logout: text(record.logout, ""),
@@ -83,7 +85,7 @@ export function DayDashboardBody({
   return (
     <>
       <div className={tw.kpis}>
-        <Kpi label="Date" value={output.date} />
+        <Kpi label="Date" value={output.weekday ? `${output.weekday} ${output.date}` : output.date} />
         {showHours ? <Kpi label="Hours" value={hoursLabel} /> : null}
         {showHours ? <Kpi label="In" value={output.login || "—"} /> : null}
         {showHours ? <Kpi label="Out" value={output.logout || "—"} /> : null}
@@ -161,7 +163,7 @@ export function DayDashboard({
       }
     >
       <ModelContext
-        content={`${output.employeeName} on ${output.date}: ${hoursLabel}, ${output.taskCounts.done}/${output.taskCounts.total} tasks.`}
+        content={`${output.employeeName} on ${output.weekday ? `${output.weekday} ` : ""}${output.date}: ${hoursLabel}, ${output.taskCounts.done}/${output.taskCounts.total} tasks.`}
       />
       <DayDashboardBody output={output} topics={topics} />
     </AppShell>

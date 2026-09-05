@@ -1,4 +1,14 @@
 import * as attendance from "./attendance.js";
+import {
+  calendarContext,
+  describeRange,
+  eachIsoDate,
+  formatDateLabel,
+  hasDateFilter,
+  resolveDateRange,
+  weekdayShort,
+  type DateFilter,
+} from "./calendar.js";
 import type { HistoryExportDay } from "./export-files.js";
 import {
   employeeName,
@@ -48,40 +58,9 @@ export async function loadHistoryPage(ctx: AttendanceCtx, page = 0) {
   return { history, data: summarizeHistory(history, detailsByDate) };
 }
 
-const ISO_DATE = /^\d{4}-\d{2}-\d{2}$/;
-const MAX_EXPORT_DAYS = 62;
-
 function fallbackEmployee(ctx: AttendanceCtx) {
   const user = ctx.auth?.user;
   return user?.fullName || user?.email || user?.id || "Employee";
-}
-
-function parseIsoDate(value: string, field: string) {
-  const date = value.trim().slice(0, 10);
-  if (!ISO_DATE.test(date)) {
-    throw new Error(`${field} must be YYYY-MM-DD, e.g. 2026-08-18.`);
-  }
-  return date;
-}
-
-function addUtcDays(iso: string, amount: number) {
-  const [year, month, day] = iso.split("-").map(Number);
-  const next = new Date(Date.UTC(year, month - 1, day + amount));
-  return next.toISOString().slice(0, 10);
-}
-
-export function eachIsoDate(from: string, to: string) {
-  if (from > to) {
-    throw new Error("from must be on or before to.");
-  }
-  const dates: string[] = [];
-  for (let cursor = from; cursor <= to; cursor = addUtcDays(cursor, 1)) {
-    dates.push(cursor);
-    if (dates.length > MAX_EXPORT_DAYS) {
-      throw new Error(`Export range cannot exceed ${MAX_EXPORT_DAYS} days. Narrow from/to.`);
-    }
-  }
-  return dates;
 }
 
 async function loadExportDay(ctx: AttendanceCtx, date: string): Promise<HistoryExportDay & { employeeName: string }> {
@@ -118,18 +97,79 @@ async function loadExportDays(ctx: AttendanceCtx, dates: string[]) {
   };
 }
 
+export async function loadHistoryRange(ctx: AttendanceCtx, args: DateFilter) {
+  const range = resolveDateRange(args, { fallback: "none" });
+  const dates = eachIsoDate(range.from, range.to);
+  const loaded = await Promise.all(
+    dates.map(async (date) => {
+      try {
+        return await loadExportDay(ctx, date);
+      } catch {
+        return {
+          employeeName: fallbackEmployee(ctx),
+          date,
+          hours: 0,
+          login: "",
+          logout: "",
+          done: 0,
+          total: 0,
+          tasks: [],
+        };
+      }
+    })
+  );
+  const named = loaded.find((row) => row.employeeName !== "Employee");
+  const employee = named?.employeeName ?? fallbackEmployee(ctx);
+  const days = loaded.map((row) => ({
+    date: row.date,
+    weekday: weekdayShort(row.date),
+    hours: row.hours,
+    login: row.login,
+    logout: row.logout,
+    done: row.done,
+    total: row.total,
+    tasks: row.tasks,
+    attended: Boolean(row.login) || row.hours > 0,
+  }));
+  const attendedDays = days.filter((day) => day.attended).length;
+  const calendar = calendarContext(range.today);
+  const hours = days.reduce((sum, day) => sum + day.hours, 0);
+  const attendedLabels = days.filter((day) => day.attended).map((day) => formatDateLabel(day.date));
+  return {
+    data: {
+      summary: [
+        `${describeRange(range)}.`,
+        `${employee} attended ${attendedDays} of ${days.length} days${attendedLabels.length ? ` (${attendedLabels.join(", ")})` : ""}.`,
+        `${hours.toFixed(1)}h recorded.`,
+      ].join(" "),
+      employeeName: employee,
+      hasMore: false,
+      from: range.from,
+      to: range.to,
+      period: range.period,
+      attendedDays,
+      calendar,
+      days,
+      hoursChart: {
+        labels: days.map((row) => formatDateLabel(row.date)),
+        values: days.map((row) => row.hours),
+      },
+      tasksChart: {
+        labels: days.map((row) => formatDateLabel(row.date)),
+        done: days.map((row) => row.done),
+        total: days.map((row) => row.total),
+      },
+    },
+  };
+}
+
 export async function loadHistoryExport(
   ctx: AttendanceCtx,
-  options: { page?: number; date?: string; from?: string; to?: string } = {}
+  options: DateFilter & { page?: number } = {}
 ): Promise<{ employeeName: string; days: HistoryExportDay[] }> {
-  const single = options.date?.trim() ? parseIsoDate(options.date, "date") : "";
-  const from = options.from?.trim() ? parseIsoDate(options.from, "from") : single;
-  const to = options.to?.trim() ? parseIsoDate(options.to, "to") : single;
-  if (from || to) {
-    if (!from || !to) {
-      throw new Error("Pass date for one day, or both from and to for a range.");
-    }
-    return loadExportDays(ctx, eachIsoDate(from, to));
+  if (hasDateFilter(options)) {
+    const range = resolveDateRange(options, { fallback: "none" });
+    return loadExportDays(ctx, eachIsoDate(range.from, range.to));
   }
   const { data } = await loadHistoryPage(ctx, options.page ?? 0);
   return { employeeName: data.employeeName, days: data.days };

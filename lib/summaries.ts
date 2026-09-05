@@ -1,3 +1,4 @@
+import { calendarContext, formatDateLabel, weekdayShort } from "./calendar.js";
 import type { JsonRecord } from "./types.js";
 
 export function asRecord(value: unknown): JsonRecord | undefined {
@@ -55,9 +56,13 @@ export function summarizeToday(page: JsonRecord) {
     ),
   ];
 
+  const date = stringValue(page.date);
+  const calendar = calendarContext();
   return {
-    summary: `${status} · ${done}/${tasks.length} tasks`,
-    date: stringValue(page.date),
+    summary: `${formatDateLabel(date || calendar.today)} · ${status} · ${done}/${tasks.length} tasks`,
+    date,
+    weekday: weekdayShort(date || calendar.today),
+    calendar,
     employeeName: employee,
     morningDone,
     eodDone,
@@ -215,6 +220,7 @@ export function summarizeHistory(
     const date = stringValue(log.date).slice(0, 10);
     return {
       date,
+      weekday: weekdayShort(date),
       hours: parseHours(log.net_hours),
       login: stringValue(log.login_time),
       logout: stringValue(log.logout_time),
@@ -236,11 +242,11 @@ export function summarizeHistory(
     hasMore: boolValue(history.has_more),
     days,
     hoursChart: {
-      labels: [...days].reverse().map((row) => row.date),
+      labels: [...days].reverse().map((row) => formatDateLabel(row.date) || row.date),
       values: [...days].reverse().map((row) => row.hours),
     },
     tasksChart: {
-      labels: [...days].reverse().map((row) => row.date),
+      labels: [...days].reverse().map((row) => formatDateLabel(row.date) || row.date),
       done: [...days].reverse().map((row) => row.done),
       total: [...days].reverse().map((row) => row.total),
     },
@@ -339,8 +345,9 @@ export function summarizeDay(detail: JsonRecord, employee = "Employee") {
   const login = stringValue(morning.login_time);
   const logout = stringValue(eod.logout_time);
   return {
-    summary: `${date} · ${hours.toFixed(1)}h · ${done}/${tasks.length} tasks`,
+    summary: `${formatDateLabel(date) || date} · ${hours.toFixed(1)}h · ${done}/${tasks.length} tasks`,
     date,
+    weekday: weekdayShort(date),
     employeeName: employee,
     login,
     logout,

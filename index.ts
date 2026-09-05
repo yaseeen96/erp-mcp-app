@@ -13,10 +13,10 @@ import { registerAttendanceWriteTools } from "./tools/attendance-write.js";
 const config = {
   name: "erp-mcp-app",
   title: "ST Attendance",
-  version: "1.2.0",
+  version: "1.4.0",
   description: "Per-user ERPNext attendance MCP App for ST Attendance Tracker",
   instructions:
-    "Read the current tool schemas. export-history supports date (one day) and from+to (inclusive range) in one PDF or one Excel — same filters for both. Never say it can only export one day or that Excel has no range. Precise ask → one tool. A date or range plus PDF/Excel is one outcome: export-history only — do not also call show-day or show-history, and do not export days separately then merge. Vague ask (see vs download, which days, PDF vs Excel) → ask one short question with 2–4 options; do not guess. Two tools only if they clearly asked for two outcomes. Never pair a get/list helper with its show-* twin, add-tasks with check-in unless they asked both, or loop show-day. Never draw ASCII charts. Login is Google or email/password. Route when clear: PDF/Excel/export/download → export-history (one day → date=YYYY-MM-DD; several days → from and to; PDF → format=pdf; Excel → format=xlsx). See one day → show-day. Today → show-today. Week → show-history. Teammates → show-team-board. One teammate → show-employee-day. HR → show-management-board. Recurring → show-recurring. Extra hours → show-additional-work. Project list → show-projects. Plan a product and they did not say check in: search, ask only if needed, then add-tasks (never punches). Check in / punch in / start the day → check-in now. Finish day → check-out. Destructive tools need confirm=true.",
+    "Read the current tool schemas. Dates are Asia/Kolkata. Pass when= their date words unchanged (today, yesterday, this week, last week, this month, August, 1 September, 18/08/2026). Do not convert dates or invent weekdays — trust weekday fields on the result. Weeks are Monday–Sunday. Precise ask → one tool. Teammate day/week/month or how many days X attended → show-employee-history once with when=. My day/week/month → show-history once with when=. Never loop show-day or show-employee-day. Export PDF/Excel → export-history once with the same when=. Vague ask → one short question. Two tools only if they asked for two outcomes. Route: today → show-today. See one personal day in detail → show-day. One teammate one day in detail → show-employee-day. Teammates today → show-team-board. HR → show-management-board. Recurring → show-recurring. Extra hours → show-additional-work. Projects → show-projects. Plan without punch → add-tasks. Punch in → check-in. Finish day → check-out. Destructive tools need confirm=true.",
   websiteUrl: env.erpnextUrl,
   favicon: "favicon.jpg",
   icons: [
@@ -52,6 +52,7 @@ export const getToday = readTools.getToday;
 export const getTeamDashboard = readTools.getTeamBoard;
 export const getManagementDashboard = readTools.getManagementBoard;
 export const getEmployeeDay = readTools.getEmployeeDay;
+export const getEmployeeHistory = readTools.getEmployeeHistory;
 export const getHistory = readTools.getHistory;
 export const getHistoryDay = readTools.getHistoryDay;
 export const getExport = readTools.getExport;
@@ -65,6 +66,7 @@ export const showManagementBoard = readTools.showManagementBoard;
 export const showHistory = readTools.showHistory;
 export const showDay = readTools.showDay;
 export const showEmployeeDay = readTools.showEmployeeDay;
+export const showEmployeeHistory = readTools.showEmployeeHistory;
 export const showRecurring = readTools.showRecurring;
 export const showAdditionalWork = readTools.showAdditionalWork;
 export const showProjects = readTools.showProjects;
