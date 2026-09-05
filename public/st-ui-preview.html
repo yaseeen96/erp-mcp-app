@@ -1,0 +1,307 @@
+<!doctype html>
+<meta charset="utf-8" />
+<title>ST Attendance preview</title>
+<style>.st-app {
+  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+  color: var(--st-text);
+  background: var(--st-bg);
+  box-sizing: border-box;
+}
+
+.st-app,
+.st-app * {
+  box-sizing: border-box;
+}
+
+.st-app[data-theme="light"] {
+  --st-bg: #f5f5f5;
+  --st-card: #ffffff;
+  --st-border: #d1d8dd;
+  --st-text: #1f272e;
+  --st-muted: #6c7680;
+  --st-soft: #f0f4f7;
+  --st-accent: #2490ef;
+  --st-accent-ink: #ffffff;
+  --st-good: #1f6b43;
+  --st-warn: #9a6700;
+  --st-bad: #b52a2a;
+  --st-info: #1a6bb5;
+}
+
+.st-app[data-theme="dark"] {
+  --st-bg: #1e1e1e;
+  --st-card: #252525;
+  --st-border: #3d3d3d;
+  --st-text: #e6e6e6;
+  --st-muted: #9aa0a6;
+  --st-soft: #2c2c2c;
+  --st-accent: #5eb0ef;
+  --st-accent-ink: #102030;
+  --st-good: #7dcea0;
+  --st-warn: #e8c36a;
+  --st-bad: #e08b8b;
+  --st-info: #8cbcde;
+}
+
+.st-shell {
+  padding: 12px 14px 16px;
+  min-height: 280px;
+}
+
+.st-header {
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+  align-items: baseline;
+  margin-bottom: 12px;
+  padding-bottom: 10px;
+  border-bottom: 1px solid var(--st-border);
+}
+
+.st-kicker {
+  margin: 0 0 2px;
+  font-size: 12px;
+  color: var(--st-muted);
+}
+
+.st-title {
+  margin: 0;
+  font-size: 16px;
+  line-height: 1.3;
+  font-weight: 600;
+}
+
+.st-sub {
+  margin: 3px 0 0;
+  color: var(--st-muted);
+  font-size: 12px;
+  line-height: 1.45;
+}
+
+.st-stats {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 16px 22px;
+  margin: 0 0 14px;
+  padding: 8px 0 12px;
+  border-bottom: 1px solid var(--st-border);
+}
+
+.st-stat {
+  min-width: 56px;
+}
+
+.st-stat b {
+  display: block;
+  font-size: 15px;
+  font-weight: 600;
+  line-height: 1.2;
+}
+
+.st-stat span {
+  color: var(--st-muted);
+  font-size: 11px;
+}
+
+.st-grid {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+  gap: 10px;
+  margin-bottom: 10px;
+}
+
+.st-card {
+  background: var(--st-card);
+  border: 1px solid var(--st-border);
+  border-radius: 4px;
+  padding: 10px 12px 12px;
+  margin-bottom: 10px;
+}
+
+.st-card h3 {
+  margin: 0 0 8px;
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--st-muted);
+}
+
+.st-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 12px;
+}
+
+.st-table th,
+.st-table td {
+  text-align: left;
+  padding: 6px 8px 6px 0;
+  border-bottom: 1px solid var(--st-border);
+  vertical-align: top;
+}
+
+.st-table th {
+  color: var(--st-muted);
+  font-weight: 500;
+  font-size: 11px;
+}
+
+.st-table tr:last-child td {
+  border-bottom: 0;
+}
+
+.st-pill {
+  font-size: 12px;
+  font-weight: 500;
+}
+
+.st-pill.good { color: var(--st-good); }
+.st-pill.warn { color: var(--st-warn); }
+.st-pill.bad { color: var(--st-bad); }
+.st-pill.info { color: var(--st-info); }
+.st-pill.muted { color: var(--st-muted); }
+
+.st-actions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px;
+}
+
+.st-btn {
+  appearance: none;
+  border: 1px solid var(--st-border);
+  background: var(--st-card);
+  color: var(--st-text);
+  border-radius: 4px;
+  padding: 5px 10px;
+  font: inherit;
+  font-size: 12px;
+  cursor: pointer;
+}
+
+.st-btn.primary {
+  background: var(--st-accent);
+  border-color: var(--st-accent);
+  color: var(--st-accent-ink);
+}
+
+.st-btn:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.st-field {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  margin-bottom: 8px;
+  font-size: 12px;
+  color: var(--st-muted);
+}
+
+.st-field input,
+.st-field select,
+.st-field textarea,
+.st-actions input {
+  border: 1px solid var(--st-border);
+  background: var(--st-card);
+  color: var(--st-text);
+  border-radius: 4px;
+  padding: 5px 8px;
+  font: inherit;
+  font-size: 12px;
+}
+
+.st-alert {
+  padding: 8px 10px;
+  border: 1px solid var(--st-bad);
+  background: var(--st-card);
+  color: var(--st-bad);
+  font-size: 12px;
+  margin-bottom: 10px;
+}
+
+.st-empty,
+.st-pending {
+  color: var(--st-muted);
+  font-size: 12px;
+}
+
+.st-skeleton {
+  height: 10px;
+  background: var(--st-soft);
+  margin: 6px 0;
+}
+
+@media (max-width: 720px) {
+  .st-grid,
+  .st-header {
+    display: block;
+  }
+
+  .st-header {
+    margin-bottom: 10px;
+  }
+
+  .st-actions {
+    margin-top: 8px;
+  }
+}
+</style>
+<body style="margin:0">
+  <div class="st-app st-shell" data-theme="light">
+    <header class="st-header">
+      <div>
+        <p class="st-kicker">Daily Work Log</p>
+        <h1 class="st-title">Aisha Rahman</h1>
+        <p class="st-sub">Checked in at 09:12. 1 of 3 tasks done.</p>
+      </div>
+      <div class="st-actions">
+        <button class="st-btn" type="button">Open in Desk</button>
+      </div>
+    </header>
+    <div class="st-stats">
+      <div class="st-stat"><b>2026-09-05</b><span>Date</span></div>
+      <div class="st-stat"><b>Checked in</b><span>Status</span></div>
+      <div class="st-stat"><b>09:12</b><span>Login</span></div>
+      <div class="st-stat"><b>1/3</b><span>Tasks done</span></div>
+    </div>
+    <section class="st-card">
+      <h3>Tasks</h3>
+      <table class="st-table">
+        <thead>
+          <tr><th>Task</th><th>Project</th><th>Status</th><th>Est.</th></tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td>Fix leave approval on mobile</td>
+            <td>HR Portal</td>
+            <td><span class="st-pill good">Done</span></td>
+            <td>2h</td>
+          </tr>
+          <tr>
+            <td>Payroll export review</td>
+            <td>Finance</td>
+            <td><span class="st-pill warn">In Progress</span></td>
+            <td>1h 30m</td>
+          </tr>
+          <tr>
+            <td>Standup notes</td>
+            <td>—</td>
+            <td><span class="st-pill muted">Pending</span></td>
+            <td>30m</td>
+          </tr>
+        </tbody>
+      </table>
+    </section>
+    <section class="st-card">
+      <h3>End of day</h3>
+      <label class="st-field">Lunch from<input value="13:00" /></label>
+      <label class="st-field">Lunch to<input value="13:30" /></label>
+      <div class="st-actions">
+        <button class="st-btn primary" type="button">Submit EOD</button>
+        <button class="st-btn" type="button">Reset check-in</button>
+      </div>
+    </section>
+  </div>
+</body>
