@@ -181,7 +181,7 @@ async function main() {
   const ready = checks.every((check) => check.ok);
   console.log("");
   if (ready) {
-    console.log("Ready: this site can do per-user MCP OAuth (Login with Google on the Frappe page).");
+    console.log("Ready: this site can do per-user MCP OAuth (Google or email/password on the Frappe login page).");
     process.exit(0);
   }
 

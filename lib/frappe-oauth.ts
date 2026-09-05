@@ -5,6 +5,7 @@ import {
   type OAuthAuthInfo,
   type OAuthMetadata,
 } from "mcp-use/oauth";
+import { FRAPPE_BEARER_SETUP_HINT } from "./frappe-client.js";
 import { env } from "./env.js";
 import type { FrappeUser, JsonRecord } from "./types.js";
 
@@ -110,6 +111,26 @@ async function readOpenIdProfile(token: string, signal?: AbortSignal): Promise<J
   return unwrapMessage(await readJson(response));
 }
 
+async function readLoggedUser(token: string, signal?: AbortSignal): Promise<string | undefined> {
+  const response = await fetch(endpoint("/api/method/frappe.auth.get_logged_user"), {
+    method: "GET",
+    headers: {
+      Accept: "application/json",
+      Authorization: `Bearer ${token}`,
+    },
+    signal,
+  });
+  const body = await readJson(response);
+  if (!response.ok) {
+    return undefined;
+  }
+  const root = asRecord(body);
+  const message = root?.message;
+  return typeof message === "string" && message.trim() && message !== "Guest"
+    ? message.trim()
+    : undefined;
+}
+
 export const frappeOAuthMetadata = {
   // Inspector discovers AS metadata from this issuer. Frappe's
   // /.well-known/openid-configuration 301s to an API method, and
@@ -144,6 +165,11 @@ export function createFrappeOAuthProvider() {
             );
           }
 
+          const loggedUser = await readLoggedUser(token);
+          if (!loggedUser) {
+            throw new OAuthError(OAuthErrorCode.InvalidToken, FRAPPE_BEARER_SETUP_HINT);
+          }
+
           const profile = await readOpenIdProfile(token);
           const now = Math.floor(Date.now() / 1000);
           const expiresAt =
@@ -155,6 +181,7 @@ export function createFrappeOAuthProvider() {
           }
 
           const userId =
+            loggedUser ??
             stringField(profile, "email", "sub", "name") ??
             stringField(introspection, "username", "user", "user_id", "sub", "email");
           if (!userId) {

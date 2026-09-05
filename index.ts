@@ -1,5 +1,6 @@
 import { MCPServer } from "mcp-use";
 import { mountFrappeClientRegistration } from "./lib/dcr.js";
+import { mountExportDownloads } from "./lib/export-store.js";
 import { env } from "./lib/env.js";
 import { createFrappeOAuthProvider } from "./lib/frappe-oauth.js";
 import type { FrappeUser } from "./lib/types.js";
@@ -12,7 +13,7 @@ const config = {
   version: "1.0.0",
   description: "Per-user ERPNext attendance MCP App for ST Attendance Tracker",
   instructions:
-    "Authenticate as the Frappe user (Login with Google on the ERPNext page). Use show-today, show-team-board, show-management-board, or show-history to open charts. Writes go through check-in, check-out, and the other attendance tools. Destructive tools require confirm=true.",
+    "Authenticate as the Frappe user on the ERPNext page (Login with Google, or email and password). Use show-today, show-team-board, show-management-board, or show-history to open charts. For 'what did I work on' or the past week, call get-history once — it already includes daily task titles. Do not loop per-day history tools. When the user asks for Excel, spreadsheet, or PDF, call export-history and return the files. If they only say PDF or Excel, omit topics for the full report. If they ask for only days worked, hours, tasks, or in/out, set topics to that slice — Excel and PDF both follow topics. Do not paste CSV. Writes go through check-in, check-out, and the other attendance tools. Destructive tools require confirm=true.",
   websiteUrl: env.erpnextUrl,
   icons: [
     {
@@ -31,6 +32,8 @@ const server = env.oauthEnabled
     })
   : new MCPServer(config);
 
+mountExportDownloads(server);
+
 if (env.oauthEnabled) {
   mountFrappeClientRegistration(server);
 }
@@ -44,6 +47,7 @@ export const getManagementDashboard = readTools.getManagementBoard;
 export const getEmployeeDay = readTools.getEmployeeDay;
 export const getHistory = readTools.getHistory;
 export const getHistoryDay = readTools.getHistoryDay;
+export const exportHistory = readTools.exportHistory;
 export const listRecurringTasks = readTools.listRecurring;
 export const listAdditionalWork = readTools.listAdditional;
 export const showToday = readTools.showToday;

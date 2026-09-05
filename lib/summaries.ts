@@ -164,34 +164,72 @@ export function summarizeManagement(board: JsonRecord) {
   };
 }
 
-export function summarizeHistory(history: JsonRecord) {
+export type HistoryTask = {
+  description: string;
+  status: string;
+  project: string;
+  actualTime: string;
+};
+
+export function tasksFromDetail(detail: JsonRecord): HistoryTask[] {
+  return asArray(detail.tasks).flatMap((row) => {
+    const task = asRecord(row);
+    if (!task) {
+      return [];
+    }
+    return [
+      {
+        description: stringValue(task.description, "Task"),
+        status: stringValue(task.status, "Pending"),
+        project: stringValue(task.project_name),
+        actualTime: stringValue(task.actual_time),
+      },
+    ];
+  });
+}
+
+export function summarizeHistory(
+  history: JsonRecord,
+  detailsByDate: Record<string, HistoryTask[]> = {}
+) {
   const logs = asArray(history.logs);
   const employee = employeeName(history.employee);
-  const hours = logs.map((row) => {
+  const days = logs.map((row) => {
     const log = asRecord(row) ?? {};
+    const date = stringValue(log.date).slice(0, 10);
     return {
-      date: stringValue(log.date),
+      date,
       hours: parseHours(log.net_hours),
+      login: stringValue(log.login_time),
+      logout: stringValue(log.logout_time),
       done: numberValue(log.done_tasks),
       total: numberValue(log.total_tasks),
+      tasks: detailsByDate[date] ?? [],
     };
   });
-  const latest = hours[0];
+  const latest = days[0];
+  const work = days
+    .filter((day) => day.tasks.length)
+    .map((day) => `${day.date}: ${day.tasks.map((task) => task.description).join("; ")}`)
+    .join(" | ");
 
   return {
     summary: latest
-      ? `${employee}: latest ${latest.date} ${latest.hours.toFixed(1)}h, ${latest.done}/${latest.total} tasks. ${logs.length} days loaded.`
+      ? work
+        ? `${employee} last ${days.length} days — ${work}`
+        : `${employee}: latest ${latest.date} ${latest.hours.toFixed(1)}h, ${latest.done}/${latest.total} tasks. ${logs.length} days loaded.`
       : `${employee}: no attendance history yet.`,
     employeeName: employee,
     hasMore: boolValue(history.has_more),
+    days,
     hoursChart: {
-      labels: [...hours].reverse().map((row) => row.date),
-      values: [...hours].reverse().map((row) => row.hours),
+      labels: [...days].reverse().map((row) => row.date),
+      values: [...days].reverse().map((row) => row.hours),
     },
     tasksChart: {
-      labels: [...hours].reverse().map((row) => row.date),
-      done: [...hours].reverse().map((row) => row.done),
-      total: [...hours].reverse().map((row) => row.total),
+      labels: [...days].reverse().map((row) => row.date),
+      done: [...days].reverse().map((row) => row.done),
+      total: [...days].reverse().map((row) => row.total),
     },
   };
 }

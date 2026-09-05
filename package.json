@@ -27,7 +27,9 @@
     "check:oauth": "node scripts/check-oauth.mjs"
   },
   "dependencies": {
+    "exceljs": "^4.4.0",
     "mcp-use": "2.4.3",
+    "pdfkit": "^0.20.2",
     "react": "^19.2.7",
     "react-dom": "^19.2.7",
     "recharts": "^3.10.1",
@@ -35,6 +37,7 @@
   },
   "devDependencies": {
     "@types/node": "^22.20.0",
+    "@types/pdfkit": "^0.17.6",
     "@types/react": "^19.2.17",
     "@types/react-dom": "^19.2.3",
     "typescript": "^7.0.2"

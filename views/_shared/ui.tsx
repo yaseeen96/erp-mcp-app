@@ -160,5 +160,11 @@ export function asArray(value: unknown): Record<string, unknown>[] {
 }
 
 export function text(value: unknown, fallback = "—"): string {
-  return typeof value === "string" && value.trim() ? value : fallback;
+  if (typeof value === "string" && value.trim()) {
+    return value;
+  }
+  if (typeof value === "number" && Number.isFinite(value)) {
+    return String(value);
+  }
+  return fallback;
 }

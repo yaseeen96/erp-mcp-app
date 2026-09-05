@@ -1,4 +1,4 @@
-import { ModelContext, useCallTool, useToolContext, useViewState } from "mcp-use/react";
+import { ModelContext, useCallTool, useOpenExternal, useToolContext, useViewState } from "mcp-use/react";
 import { useState } from "react";
 import { GroupedBar, HoursLine } from "../_shared/charts.js";
 import {
@@ -19,6 +19,8 @@ export default function HistoryView() {
   const view = useToolContext<"show-history">();
   const historyTool = useCallTool("get-history");
   const dayTool = useCallTool("get-history-day");
+  const exportTool = useCallTool("export-history");
+  const openExternal = useOpenExternal();
   const [state, setState] = useViewState({ page: view.toolInput?.page ?? 0, date: "" });
   const [selectedDate, setSelectedDate] = useState(state.date);
 
@@ -76,6 +78,40 @@ export default function HistoryView() {
             }}
           >
             Older
+          </button>
+          <button
+            type="button"
+            className={tw.btn}
+            disabled={exportTool.isPending}
+            onClick={() => {
+              void exportTool
+                .callTool({ format: "xlsx", page: state.page })
+                .then((result) => {
+                  for (const file of result.structuredContent.files) {
+                    void openExternal({ url: file.url });
+                  }
+                })
+                .catch(() => {});
+            }}
+          >
+            {exportTool.isPending ? "Exporting…" : "Excel"}
+          </button>
+          <button
+            type="button"
+            className={tw.btn}
+            disabled={exportTool.isPending}
+            onClick={() => {
+              void exportTool
+                .callTool({ format: "pdf", page: state.page })
+                .then((result) => {
+                  for (const file of result.structuredContent.files) {
+                    void openExternal({ url: file.url });
+                  }
+                })
+                .catch(() => {});
+            }}
+          >
+            PDF
           </button>
           <SiteLink path="/my-history" label="Open ERPNext" />
         </div>
@@ -172,6 +208,7 @@ export default function HistoryView() {
           ) : null}
         </Card>
       ) : null}
+      {exportTool.error ? <ErrorState message={exportTool.error.message} /> : null}
     </AppShell>
   );
 }

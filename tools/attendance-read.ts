@@ -1,6 +1,9 @@
 import type { MCPServer } from "mcp-use";
 import { z } from "zod";
 import * as attendance from "../lib/attendance.js";
+import { buildHistoryExcel, buildHistoryPdf } from "../lib/export-files.js";
+import { storeExportFile } from "../lib/export-store.js";
+import { loadHistoryPage } from "../lib/history-data.js";
 import { resolveWorkLocationConfig } from "../lib/work-location.js";
 import { ok } from "../lib/result.js";
 import { frappeFailure } from "../lib/tool-utils.js";
@@ -10,6 +13,7 @@ import {
   summarizeManagement,
   summarizeTeam,
   summarizeToday,
+  tasksFromDetail,
 } from "../lib/summaries.js";
 
 const dateInput = z.object({
@@ -92,10 +96,28 @@ const managementOutput = z.object({
   }),
 });
 
+const historyTask = z.object({
+  description: z.string(),
+  status: z.string(),
+  project: z.string(),
+  actualTime: z.string(),
+});
+
 const historyOutput = z.object({
   summary: z.string(),
   employeeName: z.string(),
   hasMore: z.boolean(),
+  days: z.array(
+    z.object({
+      date: z.string(),
+      hours: z.number(),
+      login: z.string(),
+      logout: z.string(),
+      done: z.number(),
+      total: z.number(),
+      tasks: z.array(historyTask),
+    })
+  ),
   hoursChart: z.object({
     labels: z.array(z.string()),
     values: z.array(z.number()),
@@ -219,17 +241,17 @@ export function registerAttendanceReadTools(server: MCPServer<FrappeUser> | MCPS
     {
       name: "get-history",
       title: "Get my history",
-      description: "Paginated personal attendance history (15 days per page) with hours and task completion.",
+      description:
+        "One call for recent personal attendance. Page 0 is the last 15 days and already includes each day's task titles. Use this for 'past week' or 'what did I work on'. Do not call get-history-day in a loop.",
       inputSchema: z.object({
-        page: z.number().int().min(0).optional().describe("0-based page. Default 0."),
+        page: z.number().int().min(0).optional().describe("0-based page of 15 days. Default 0 (most recent)."),
       }),
       outputSchema: historyOutput,
       annotations: { readOnlyHint: true, destructiveHint: false, openWorldHint: true },
     },
     async ({ page }, ctx) => {
       try {
-        const history = await attendance.getMyHistory(ctx as AttendanceCtx, page ?? 0);
-        const data = summarizeHistory(history);
+        const { history, data } = await loadHistoryPage(ctx as AttendanceCtx, page ?? 0);
         return ok(data.summary, data, { history });
       } catch (error) {
         return frappeFailure(error);
@@ -241,23 +263,26 @@ export function registerAttendanceReadTools(server: MCPServer<FrappeUser> | MCPS
     {
       name: "get-history-day",
       title: "Get history day",
-      description: "Full task list for one past date on the signed-in employee's history.",
+      description: "View helper: full task list for one past date. Models should use get-history instead.",
+      visibility: "app",
       inputSchema: z.object({
         date: z.string().describe("Date YYYY-MM-DD"),
       }),
       outputSchema: z.object({
         summary: z.string(),
         date: z.string(),
+        tasks: z.array(historyTask),
       }),
       annotations: { readOnlyHint: true, destructiveHint: false, openWorldHint: true },
     },
     async ({ date }, ctx) => {
       try {
         const detail = await attendance.getHistoryDayDetail(ctx as AttendanceCtx, date);
-        const tasks = Array.isArray(detail.tasks) ? detail.tasks : [];
+        const tasks = tasksFromDetail(detail);
         const data = {
           summary: `${date}: ${tasks.length} tasks.`,
           date,
+          tasks,
         };
         return ok(data.summary, data, { detail });
       } catch (error) {
@@ -409,7 +434,8 @@ export function registerAttendanceReadTools(server: MCPServer<FrappeUser> | MCPS
     {
       name: "show-history",
       title: "Show history",
-      description: "Open personal attendance history with hours trend and task completion charts.",
+      description:
+        "Open the history board (charts). For a text answer about recent work, call get-history once instead.",
       inputSchema: z.object({
         page: z.number().int().min(0).optional().describe("0-based page. Default 0."),
       }),
@@ -433,6 +459,79 @@ export function registerAttendanceReadTools(server: MCPServer<FrappeUser> | MCPS
     }
   );
 
+  const exportHistory = server.tool(
+    {
+      name: "export-history",
+      title: "Export history",
+      description:
+        "Download personal attendance history as Excel (.xlsx) and/or PDF. Both files use the same topics. If the user only asks for a PDF or Excel with no focus, omit topics for the full report. If they ask for only one slice (days worked, hours, tasks, in/out), set topics to that slice. Do not paste CSV.",
+      inputSchema: z.object({
+        format: z
+          .enum(["xlsx", "pdf", "both"])
+          .optional()
+          .describe("File type. Default both."),
+        topics: z
+          .array(z.enum(["days", "hours", "tasks", "attendance"]))
+          .optional()
+          .describe(
+            "Omit for the full branded report. days=how many days worked. hours=hours and time. tasks=what they worked on. attendance=daily in/out table."
+          ),
+        page: z.number().int().min(0).optional().describe("0-based history page. Default 0."),
+      }),
+      outputSchema: z.object({
+        summary: z.string(),
+        files: z.array(
+          z.object({
+            name: z.string(),
+            mimeType: z.string(),
+            base64: z.string(),
+            url: z.string(),
+          })
+        ),
+      }),
+      view: {
+        name: "export-history",
+        description: "Download Excel and PDF attendance files",
+        prefersBorder: false,
+        csp: viewCsp,
+      },
+      annotations: { readOnlyHint: true, destructiveHint: false, openWorldHint: true },
+    },
+    async ({ format, topics, page }, ctx) => {
+      try {
+        const { data } = await loadHistoryPage(ctx as AttendanceCtx, page ?? 0);
+        const wanted = format ?? "both";
+        const built = await Promise.all([
+          ...(wanted === "pdf" ? [] : [buildHistoryExcel(data.employeeName, data.days, topics)]),
+          ...(wanted === "xlsx" ? [] : [buildHistoryPdf(data.employeeName, data.days, topics)]),
+        ]);
+        const files = built.map(storeExportFile);
+        return {
+          content: [
+            {
+              type: "text",
+              text: `Files are in the download card below. Click Download PDF or Download Excel. ${files.map((file) => file.name).join(" and ")}.`,
+            },
+            ...files.map((file) => ({
+              type: "resource" as const,
+              resource: {
+                uri: `attendance://export/${file.name}`,
+                mimeType: file.mimeType,
+                blob: file.base64,
+              },
+            })),
+          ],
+          structuredContent: {
+            summary: `Exported ${files.map((file) => file.name).join(" and ")} for ${data.employeeName}${topics?.length ? ` (${topics.join(", ")})` : ""}.`,
+            files,
+          },
+        };
+      } catch (error) {
+        return frappeFailure(error);
+      }
+    }
+  );
+
   return {
     getToday,
     getTeamBoard,
@@ -442,6 +541,7 @@ export function registerAttendanceReadTools(server: MCPServer<FrappeUser> | MCPS
     getHistoryDay,
     listRecurring,
     listAdditional,
+    exportHistory,
     showToday,
     showTeamBoard,
     showManagementBoard,

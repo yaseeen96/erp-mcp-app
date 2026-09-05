@@ -1,6 +1,6 @@
 # ST Attendance MCP App
 
-Per-user MCP server for [ST Attendance Tracker](https://st-erpv15.frappe.cloud/) on ERPNext v15. Employees sign in with the existing Frappe **Login with Google** page. Tools and React Views call `st_attendance_tracker.api` as that user.
+Per-user MCP server for [ST Attendance Tracker](https://st-erpv15.frappe.cloud/) on ERPNext v15. Employees sign in on the existing Frappe login page with **Google** or **email and password**. Tools and React Views call `st_attendance_tracker.api` as that user.
 
 ## Run
 
