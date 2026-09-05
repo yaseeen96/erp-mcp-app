@@ -13,13 +13,13 @@ npm run dev
 
 Open [http://localhost:3000/mcp/inspector](http://localhost:3000/mcp/inspector). Connect `http://localhost:3000/mcp`, then Authenticate.
 
-Desk → OAuth Client **ST Attendance MCP**. Redirect URIs (exact, all three):
+Desk → OAuth Client **ST Attendance MCP**. Redirect URIs and scopes must each be on **one line**, space-separated (newlines do not match):
 
-- `http://localhost:3000/mcp/inspector/oauth/callback`
-- `https://attendance.mcp.standardtouch.com/mcp/inspector/oauth/callback`
-- `https://inspector.manufact.com/inspector/oauth/callback`
+`http://localhost:3000/mcp/inspector/oauth/callback https://attendance.mcp.standardtouch.com/mcp/inspector/oauth/callback https://inspector.manufact.com/inspector/oauth/callback`
 
-Scopes: `all openid` on **one line** (space-separated)
+Default Redirect URI (separate field, one URL): `https://attendance.mcp.standardtouch.com/mcp/inspector/oauth/callback`
+
+Scopes: `all openid`
 
 ## Views
 
