@@ -3,7 +3,7 @@ import { z } from "zod";
 import * as attendance from "../lib/attendance.js";
 import { buildHistoryExcel, buildHistoryPdf } from "../lib/export-files.js";
 import { storeExportFile } from "../lib/export-store.js";
-import { loadHistoryPage } from "../lib/history-data.js";
+import { loadHistoryExport, loadHistoryPage } from "../lib/history-data.js";
 import { loadProjects } from "../lib/projects.js";
 import { resolveWorkLocationConfig } from "../lib/work-location.js";
 import { ok } from "../lib/result.js";
@@ -805,7 +805,13 @@ export function registerAttendanceReadTools(server: MCPServer<FrappeUser> | MCPS
       .describe(
         "Omit for the full branded report. days=how many days worked. hours=hours and time. tasks=what they worked on. attendance=daily in/out table."
       ),
-    page: z.number().int().min(0).optional().describe("0-based history page. Default 0."),
+    page: z.number().int().min(0).optional().describe("0-based history page. Default 0. Ignored when date is set."),
+    date: z
+      .string()
+      .optional()
+      .describe(
+        "One day as YYYY-MM-DD. Use this when they want only that date (e.g. 18 August 2026 → 2026-08-18). Omit page."
+      ),
   });
   const exportOutput = z.object({
     summary: z.string(),
@@ -823,20 +829,22 @@ export function registerAttendanceReadTools(server: MCPServer<FrappeUser> | MCPS
     format: "xlsx" | "pdf" | "both" | undefined,
     topics: Array<"days" | "hours" | "tasks" | "attendance"> | undefined,
     page: number | undefined,
+    date: string | undefined,
     ctx: unknown
   ) {
-    const { data } = await loadHistoryPage(ctx as AttendanceCtx, page ?? 0);
+    const data = await loadHistoryExport(ctx as AttendanceCtx, { page, date });
     const wanted = format ?? "both";
     const built = await Promise.all([
       ...(wanted === "pdf" ? [] : [buildHistoryExcel(data.employeeName, data.days, topics)]),
       ...(wanted === "xlsx" ? [] : [buildHistoryPdf(data.employeeName, data.days, topics)]),
     ]);
     const files = built.map(storeExportFile);
+    const scope = date ? ` for ${date}` : "";
     return {
       content: [
         {
           type: "text" as const,
-          text: `Files are ready. ${files.map((file) => file.name).join(" and ")}.`,
+          text: `Files are ready${scope}. ${files.map((file) => file.name).join(" and ")}.`,
         },
         ...files.map((file) => ({
           type: "resource" as const,
@@ -848,7 +856,7 @@ export function registerAttendanceReadTools(server: MCPServer<FrappeUser> | MCPS
         })),
       ],
       structuredContent: {
-        summary: `Exported ${files.map((file) => file.name).join(" and ")} for ${data.employeeName}${topics?.length ? ` (${topics.join(", ")})` : ""}.`,
+        summary: `Exported ${files.map((file) => file.name).join(" and ")} for ${data.employeeName}${scope}${topics?.length ? ` (${topics.join(", ")})` : ""}.`,
         files,
       },
     };
@@ -864,9 +872,9 @@ export function registerAttendanceReadTools(server: MCPServer<FrappeUser> | MCPS
       outputSchema: exportOutput,
       annotations: { readOnlyHint: true, destructiveHint: false, openWorldHint: true },
     },
-    async ({ format, topics, page }, ctx) => {
+    async ({ format, topics, page, date }, ctx) => {
       try {
-        return await runExport(format, topics, page, ctx);
+        return await runExport(format, topics, page, date, ctx);
       } catch (error) {
         return frappeFailure(error);
       }
@@ -878,7 +886,7 @@ export function registerAttendanceReadTools(server: MCPServer<FrappeUser> | MCPS
       name: "export-history",
       title: "Export history",
       description:
-        "Download Excel and/or PDF. If they only want a file, call this once and do not also call show-history. Omit topics for the full report.",
+        "Download Excel and/or PDF. If they name one day, pass date as YYYY-MM-DD (that file is only that day). If they only want a file, call this once and do not also call show-history. Omit topics for the full report.",
       inputSchema: exportInput,
       outputSchema: exportOutput,
       view: {
@@ -889,9 +897,9 @@ export function registerAttendanceReadTools(server: MCPServer<FrappeUser> | MCPS
       },
       annotations: { readOnlyHint: true, destructiveHint: false, openWorldHint: true },
     },
-    async ({ format, topics, page }, ctx) => {
+    async ({ format, topics, page, date }, ctx) => {
       try {
-        return await runExport(format, topics, page, ctx);
+        return await runExport(format, topics, page, date, ctx);
       } catch (error) {
         return frappeFailure(error);
       }

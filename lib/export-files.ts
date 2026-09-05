@@ -441,7 +441,7 @@ export async function buildHistoryExcel(
 
   const buffer = Buffer.from(await workbook.xlsx.writeBuffer());
   return {
-    name: exportFileName(stats.employeeName, "xlsx", undefined, plan.fileSlug),
+    name: exportFileName(stats.employeeName, "xlsx", undefined, plan.fileSlug, reportFileDate(stats)),
     mimeType: XLSX_MIME,
     base64: buffer.toString("base64"),
   };
@@ -523,7 +523,7 @@ export async function buildHistoryPdf(
   doc.end();
   const buffer = await done;
   return {
-    name: exportFileName(stats.employeeName, "pdf", undefined, plan.fileSlug),
+    name: exportFileName(stats.employeeName, "pdf", undefined, plan.fileSlug, reportFileDate(stats)),
     mimeType: PDF_MIME,
     base64: buffer.toString("base64"),
   };
@@ -545,18 +545,29 @@ function safeFilePart(value: string): string {
   return cleaned || "Employee";
 }
 
+function reportFileDate(stats: ReportStats) {
+  if (stats.firstDate === stats.lastDate && /^\d{4}-\d{2}-\d{2}$/.test(stats.firstDate)) {
+    return stats.firstDate;
+  }
+  return undefined;
+}
+
 export function exportFileName(
   employeeName: string,
   extension: "pdf" | "xlsx",
   now = new Date(),
-  slug = "Attendance-Report"
+  slug = "Attendance-Report",
+  reportDate?: string
 ): string {
-  const when = new Intl.DateTimeFormat("en-CA", {
-    timeZone: "Asia/Kolkata",
-    year: "numeric",
-    month: "2-digit",
-    day: "2-digit",
-  }).format(now);
+  const when =
+    reportDate && /^\d{4}-\d{2}-\d{2}$/.test(reportDate)
+      ? reportDate
+      : new Intl.DateTimeFormat("en-CA", {
+          timeZone: "Asia/Kolkata",
+          year: "numeric",
+          month: "2-digit",
+          day: "2-digit",
+        }).format(now);
   return `StandardTouch-${slug}-${safeFilePart(employeeName)}-${when}.${extension}`;
 }
 
