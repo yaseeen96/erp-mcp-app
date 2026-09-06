@@ -8,6 +8,7 @@ import {
   weekdayShort,
   type DateFilter,
 } from "./calendar.js";
+import { FrappeRequestError } from "./frappe-client.js";
 import {
   asArray,
   asRecord,
@@ -16,6 +17,26 @@ import {
   type HistoryTask,
 } from "./summaries.js";
 import type { AttendanceCtx, JsonRecord } from "./types.js";
+
+export function notTheirLeadMessage(name: string) {
+  const who = name.trim() || "This person";
+  return `${who} does not report to you. You are not their team lead.`;
+}
+
+function errorText(error: unknown) {
+  return error instanceof Error ? error.message : "";
+}
+
+function isAccessDenied(error: unknown) {
+  if (error instanceof FrappeRequestError && error.status === 403) {
+    return true;
+  }
+  return /access denied/i.test(errorText(error));
+}
+
+function isNotTeamLeader(error: unknown) {
+  return /not a team leader/i.test(errorText(error));
+}
 
 export type EmployeeRangeArgs = DateFilter & {
   employeeName: string;
@@ -68,14 +89,16 @@ function peopleFromBoard(board: JsonRecord) {
   });
 }
 
-async function resolveEmployee(ctx: AttendanceCtx, query: string) {
+export async function resolveEmployee(ctx: AttendanceCtx, query: string) {
   const wanted = query.trim();
   if (!wanted) {
     throw new Error("Pass employeeName (name or Employee ID).");
   }
 
+  let sawTeamBoard = false;
   try {
     const board = await attendance.getTeamDashboard(ctx);
+    sawTeamBoard = true;
     const people = peopleFromBoard(board).filter((person) => person.employeeId);
     const scored = people
       .map((person) => ({ person, score: matchScore(person, wanted) }))
@@ -91,20 +114,40 @@ async function resolveEmployee(ctx: AttendanceCtx, query: string) {
         `Several teammates match "${wanted}": ${top.map((row) => row.name).join(", ")}. Use the full name or Employee ID.`
       );
     }
+    // Team board loaded: this person is not one of your reports.
+    throw new Error(notTheirLeadMessage(wanted));
   } catch (error) {
-    if (error instanceof Error && error.message.startsWith("Several teammates")) {
+    if (
+      error instanceof Error &&
+      (error.message.startsWith("Several teammates") || error.message.includes("does not report to you"))
+    ) {
       throw error;
+    }
+    if (sawTeamBoard) {
+      throw error instanceof Error ? error : new Error(notTheirLeadMessage(wanted));
+    }
+    // Team board failed (not a TL). HR can still open anyone by Employee ID.
+    if (!isAccessDenied(error) && !isNotTeamLeader(error)) {
+      throw error instanceof Error ? error : new Error(notTheirLeadMessage(wanted));
     }
   }
 
-  const detail = await attendance.getEmployeeTaskDetail(ctx, wanted);
-  const emp = asRecord(detail.employee) ?? {};
-  const employeeId = stringValue(emp.name, wanted);
-  const name = stringValue(emp.employee_name, stringValue(emp.name, wanted));
-  if (!employeeId) {
-    throw new Error(`Could not find teammate "${wanted}".`);
+  try {
+    const detail = await attendance.getEmployeeTaskDetail(ctx, wanted);
+    const emp = asRecord(detail.employee) ?? {};
+    const employeeId = stringValue(emp.name, wanted);
+    const name = stringValue(emp.employee_name, stringValue(emp.name, wanted));
+    if (employeeId) {
+      return { employeeId, name };
+    }
+  } catch (error) {
+    if (isAccessDenied(error) || isNotTeamLeader(error)) {
+      throw new Error(notTheirLeadMessage(wanted));
+    }
+    throw error instanceof Error ? error : new Error(notTheirLeadMessage(wanted));
   }
-  return { employeeId, name };
+
+  throw new Error(notTheirLeadMessage(wanted));
 }
 
 function dayFromDetail(date: string, detail: JsonRecord | null, fallbackId: string): EmployeeRangeDay {

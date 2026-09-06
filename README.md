@@ -28,8 +28,10 @@ Scopes: `all openid`
 | `show-today` | Check-in / EOD workspace |
 | `show-day` | One personal date |
 | `show-history` | Recent days and hours trend |
-| `show-employee-day` | A teammate's day (TL / HR) |
-| `show-team-board` | Team Leader roster and charts |
+| `list-teammates` | Names of people on your team |
+| `show-employee-day` | One teammate's day (name or Employee ID) |
+| `show-employee-history` | One teammate's week or month |
+| `show-team-board` | Whole-team roster (not one named person) |
 | `show-management-board` | HR company board |
 | `show-projects` | Project groups |
 | `show-recurring` | Recurring templates |

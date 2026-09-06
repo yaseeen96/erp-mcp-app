@@ -114,8 +114,9 @@ export function summarizeTeam(board: JsonRecord) {
     };
   });
 
+  const names = people.map((row) => row.name).filter(Boolean);
   return {
-    summary: `${stringValue(board.date)} · ${checkedIn} in · ${late} late · ${missing} missing`,
+    summary: `${stringValue(board.date)} · ${names.join(", ") || "no teammates"} · ${checkedIn} in · ${late} late · ${missing} missing`,
     date: stringValue(board.date),
     kpis: {
       total: numberValue(summary.total, employees.length),
@@ -134,6 +135,31 @@ export function summarizeTeam(board: JsonRecord) {
       values: people.map((row) => row.hours),
     },
     people,
+    names,
+  };
+}
+
+export function summarizeTeammates(board: JsonRecord) {
+  const team = summarizeTeam(board);
+  const names = team.names;
+  const spoken = names.length
+    ? `Your team (${names.length}): ${names.join(", ")}.`
+    : "No teammates on this board.";
+  const statuses = team.people
+    .filter((row) => row.name)
+    .map((row) => `${row.name} ${row.status.replaceAll("_", " ")}`)
+    .join(". ");
+  return {
+    summary: statuses ? `${spoken} ${statuses}.` : spoken,
+    date: team.date,
+    names,
+    teammates: team.people.map((row) => ({
+      name: row.name,
+      employeeId: row.employeeId,
+      designation: row.designation,
+      department: row.department,
+      status: row.status,
+    })),
   };
 }
 

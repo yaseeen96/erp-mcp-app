@@ -4,7 +4,7 @@ import * as attendance from "../lib/attendance.js";
 import { buildHistoryExcel, buildHistoryPdf } from "../lib/export-files.js";
 import { storeExportFile } from "../lib/export-store.js";
 import { hasDateFilter, resolveSingleDate } from "../lib/calendar.js";
-import { loadEmployeeHistory } from "../lib/employee-range.js";
+import { loadEmployeeHistory, resolveEmployee } from "../lib/employee-range.js";
 import { loadHistoryExport, loadHistoryPage, loadHistoryRange } from "../lib/history-data.js";
 import { loadProjects } from "../lib/projects.js";
 import { resolveWorkLocationConfig } from "../lib/work-location.js";
@@ -20,6 +20,7 @@ import {
   summarizeManagement,
   summarizeRecurring,
   summarizeTeam,
+  summarizeTeammates,
   stringValue,
   summarizeToday,
   tasksFromDetail,
@@ -140,6 +141,22 @@ const teamOutput = z.object({
       hours: z.number(),
       done: z.number(),
       total: z.number(),
+    })
+  ),
+  names: z.array(z.string()),
+});
+
+const teammatesOutput = z.object({
+  summary: z.string(),
+  date: z.string(),
+  names: z.array(z.string()),
+  teammates: z.array(
+    z.object({
+      name: z.string(),
+      employeeId: z.string(),
+      designation: z.string(),
+      department: z.string(),
+      status: z.string(),
     })
   ),
 });
@@ -426,6 +443,27 @@ export function registerAttendanceReadTools(server: MCPServer<FrappeUser> | MCPS
     }
   );
 
+  const getTeammates = server.tool(
+    {
+      name: "get-teammates",
+      title: "Get teammates",
+      description: "View helper: reload teammate names. Models must use list-teammates instead.",
+      visibility: "app",
+      inputSchema: dateInput,
+      outputSchema: teammatesOutput,
+      annotations: { readOnlyHint: true, destructiveHint: false, openWorldHint: true },
+    },
+    async ({ date }, ctx) => {
+      try {
+        const board = await attendance.getTeamDashboard(ctx as AttendanceCtx, date);
+        const data = summarizeTeammates(board);
+        return ok(data.summary, data);
+      } catch (error) {
+        return frappeFailure(error);
+      }
+    }
+  );
+
   const getManagementBoard = server.tool(
     {
       name: "get-management-dashboard",
@@ -462,12 +500,13 @@ export function registerAttendanceReadTools(server: MCPServer<FrappeUser> | MCPS
     },
     async ({ employeeName, date }, ctx) => {
       try {
+        const employee = await resolveEmployee(ctx as AttendanceCtx, employeeName);
         const detail = await attendance.getEmployeeTaskDetail(
           ctx as AttendanceCtx,
-          employeeName,
+          employee.employeeId,
           date
         );
-        const data = summarizeEmployeeDay(detail, employeeName);
+        const data = summarizeEmployeeDay(detail, employee.name);
         return ok(data.summary, data, { detail });
       } catch (error) {
         return frappeFailure(error);
@@ -662,7 +701,7 @@ export function registerAttendanceReadTools(server: MCPServer<FrappeUser> | MCPS
       name: "show-team-board",
       title: "Show team board",
       description:
-        "Team Leader board and direct-report roster (name, status, hours). One call is enough — do not also call get-team-dashboard. Omit topics for the full board.",
+        "Whole-team roster only (who is in / late / missing). For names only use list-teammates. Never use this for one named person — that is show-employee-day or show-employee-history. One call is enough — do not also call get-team-dashboard.",
       inputSchema: dateInput.extend({
         topics: teamTopics,
       }),
@@ -680,6 +719,33 @@ export function registerAttendanceReadTools(server: MCPServer<FrappeUser> | MCPS
         const board = await attendance.getTeamDashboard(ctx as AttendanceCtx, date);
         const data = summarizeTeam(board);
         return ok(data.summary, data, { board });
+      } catch (error) {
+        return frappeFailure(error);
+      }
+    }
+  );
+
+  const listTeammates = server.tool(
+    {
+      name: "list-teammates",
+      title: "List teammates",
+      description:
+        "Names of people on your team. Use when they ask who is on my team, teammate names, or before looking up someone. Speak every name. One call. Then use show-employee-day with that name.",
+      inputSchema: dateInput,
+      outputSchema: teammatesOutput,
+      view: {
+        name: "teammates",
+        description: "Teammate names on your team",
+        prefersBorder: false,
+        csp: viewCsp,
+      },
+      annotations: { readOnlyHint: true, destructiveHint: false, openWorldHint: true },
+    },
+    async ({ date }, ctx) => {
+      try {
+        const board = await attendance.getTeamDashboard(ctx as AttendanceCtx, date);
+        const data = summarizeTeammates(board);
+        return ok(data.summary, data);
       } catch (error) {
         return frappeFailure(error);
       }
@@ -788,9 +854,9 @@ export function registerAttendanceReadTools(server: MCPServer<FrappeUser> | MCPS
       name: "show-employee-day",
       title: "Show employee day",
       description:
-        "One team member's single day. Prefer when='1 September' if they did not give ISO. For a week, month, or 'how many days did X attend': show-employee-history once — never loop this tool.",
+        "What a named teammate worked on for one day. Always call this — do not invent a permission error and do not use show-team-board. 'What did Maaz work on yesterday' → employeeName=Maaz, when=yesterday. For a week, month, or 'how many days did X attend': show-employee-history once.",
       inputSchema: z.object({
-        employeeName: z.string().describe("Teammate name or Employee ID."),
+        employeeName: z.string().describe("First name, full name, or Employee ID. Maaz → Maaz."),
         date: z.string().optional().describe("YYYY-MM-DD if they gave ISO. Defaults to today."),
         when: whenInput,
         topics: dayTopics,
@@ -806,13 +872,14 @@ export function registerAttendanceReadTools(server: MCPServer<FrappeUser> | MCPS
     },
     async ({ employeeName, date, when }, ctx) => {
       try {
+        const employee = await resolveEmployee(ctx as AttendanceCtx, employeeName);
         const resolved = date || when ? resolveSingleDate({ date, when }) : undefined;
         const detail = await attendance.getEmployeeTaskDetail(
           ctx as AttendanceCtx,
-          employeeName,
+          employee.employeeId,
           resolved
         );
-        const data = summarizeEmployeeDay(detail, employeeName);
+        const data = summarizeEmployeeDay(detail, employee.name);
         return ok(data.summary, data, { detail });
       } catch (error) {
         return frappeFailure(error);
@@ -825,7 +892,7 @@ export function registerAttendanceReadTools(server: MCPServer<FrappeUser> | MCPS
       name: "show-employee-history",
       title: "Show employee history",
       description:
-        "One teammate's day, week, or month in a single call. Pass when= their words: this week, August, yesterday, 1 September. 'How many days did Maaz attend this week' → employeeName=Maaz, when='this week'. Trust returned weekdays — never invent dates or loop show-employee-day. Team Leaders and HR only.",
+        "One teammate's day, week, or month. Always call this for a named person — do not invent Team-Leader-only access and do not use show-team-board. 'How many days did Maaz attend this week' → employeeName=Maaz, when='this week'. Trust returned weekdays — never invent dates or loop show-employee-day.",
       inputSchema: z.object({
         employeeName: z.string().describe("Teammate name or Employee ID. Maaz → Maaz."),
         ...dateFilterFields,
@@ -1058,6 +1125,7 @@ export function registerAttendanceReadTools(server: MCPServer<FrappeUser> | MCPS
   return {
     getToday,
     getTeamBoard,
+    getTeammates,
     getManagementBoard,
     getEmployeeDay,
     getEmployeeHistory,
@@ -1070,6 +1138,7 @@ export function registerAttendanceReadTools(server: MCPServer<FrappeUser> | MCPS
     exportHistory,
     showToday,
     showTeamBoard,
+    listTeammates,
     showManagementBoard,
     showHistory,
     showDay,

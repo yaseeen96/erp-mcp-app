@@ -17,8 +17,10 @@ Pass `when` as their date words. Do not compute ISO dates or weekdays yourself.
 | show / see that one day (me) | `show-day` | `when=…` |
 | today / am I in | `show-today` | — |
 | my week / month / how many days I attended | `show-history` | `when=this week` or `when=August` |
-| teammate day / week / month / how many days X attended | `show-employee-history` | `employeeName`, `when=…` |
-| one teammate, one day, full day UI | `show-employee-day` | name, `when=…` |
+| teammate week / month / how many days X attended | `show-employee-history` | `employeeName`, `when=…` |
+| what did X work on / one teammate one day | `show-employee-day` | name, `when=…` |
+| who is on my team / teammate names | `list-teammates` | — |
+| whole team who is in / late / missing | `show-team-board` | optional `date` |
 | check in / punch in | `check-in` | — |
 | plan / add tasks, no check-in | `add-tasks` | projects and tasks |
 
@@ -33,6 +35,18 @@ Example: “how many days did Maaz attend this week”
 “how many days did Maaz attend in August”
 
 `show-employee-history` `{ "employeeName": "Maaz", "when": "August" }`
+
+“who is on my team” / “what are my teammates' names”
+
+`list-teammates` `{}`
+
+Speak every name from the result. Do not say “check the board” or skip names.
+
+“What did Maaz work on yesterday”
+
+`show-employee-day` `{ "employeeName": "Maaz", "when": "yesterday" }`
+
+Never invent “restricted to Team Leaders or HR”. Call the teammate tool. If ERPNext returns an error, quote that error. Never switch to `show-team-board` for one named person.
 
 “show Maaz on 1 September”
 

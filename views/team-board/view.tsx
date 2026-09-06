@@ -31,7 +31,9 @@ export default function TeamBoardView() {
 
   const output = reload.data?.structuredContent ?? (view.status === "ready" ? view.toolOutput : undefined);
   const board = asRecord(reload.data?._meta?.board ?? (view.status === "ready" ? view.meta?.board : undefined));
+  const people = output?.people ?? [];
   const employees = asArray(board?.employees);
+  const names = output?.names ?? people.map((person) => person.name).filter(Boolean);
   const topics = state.topics.length ? state.topics : undefined;
   const showPresence = wantsTopic(topics, "presence");
   const showHours = wantsTopic(topics, "hours");
@@ -81,8 +83,44 @@ export default function TeamBoardView() {
       }
     >
       <ModelContext
-        content={`Team board ${output?.date ?? ""}: ${output?.kpis.checkedIn ?? 0} in, ${output?.kpis.missing ?? 0} missing, ${output?.kpis.late ?? 0} late.`}
+        content={`Team board ${output?.date ?? ""}. Teammates: ${
+          names.length ? names.join(", ") : "none listed"
+        }. ${output?.kpis.checkedIn ?? 0} in, ${output?.kpis.missing ?? 0} missing, ${output?.kpis.late ?? 0} late. Speak every name.`}
       />
+      <Card title="Teammates">
+        {people.length ? (
+          <ul className="m-0 list-none p-0">
+            {people.map((person) => (
+              <li
+                key={person.employeeId || person.name}
+                className="flex items-center justify-between gap-3 border-b border-[var(--st-border)] py-2 last:border-b-0"
+              >
+                <div>
+                  <p className="m-0 text-sm font-semibold text-[var(--st-title)]">{person.name}</p>
+                  {person.designation ? <p className={tw.sub}>{person.designation}</p> : null}
+                </div>
+                <Pill tone={statusTone(person.status)}>{person.status.replaceAll("_", " ")}</Pill>
+              </li>
+            ))}
+          </ul>
+        ) : employees.length ? (
+          <ul className="m-0 list-none p-0">
+            {employees.map((row) => (
+              <li
+                key={text(row.name)}
+                className="flex items-center justify-between gap-3 border-b border-[var(--st-border)] py-2 last:border-b-0"
+              >
+                <p className="m-0 text-sm font-semibold text-[var(--st-title)]">
+                  {text(row.employee_name)}
+                </p>
+                <Pill tone={statusTone(text(row.status))}>{text(row.status)}</Pill>
+              </li>
+            ))}
+          </ul>
+        ) : (
+          <p className={tw.empty}>No teammates on this board.</p>
+        )}
+      </Card>
       {showPresence ? (
         <div className={tw.kpis}>
           <Kpi label="Team" value={output?.kpis.total ?? 0} />
