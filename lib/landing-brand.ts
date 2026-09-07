@@ -35,7 +35,7 @@ function rewriteClaudeCodeSteps(html: string): string {
             <div class="code-block"><pre data-copy="${safeUrl}">${safeUrl}</pre></div>
           </li>
           <li>Continue, then Connect, and sign in with Google or email/password on the Frappe page</li>
-          <li>In a chat, open + \u2192 Connectors and turn it on</li>
+          <li>In a chat, open + \u2192 Connectors and turn it on. After 1.5.0, reconnect so Claude picks up snake_case tool names</li>
         </ol>
         <p style="text-align:center;margin:1.25rem 0 1rem;color:#64748b;font-weight:700;font-size:0.75rem;letter-spacing:0.08em;text-transform:uppercase">or</p>
         <p><strong>Claude Code</strong> in the terminal. The Desktop app does not install the <code>claude</code> command \u2014 if you see <code>command not found</code>, use Desktop above, or install Claude Code first.</p>
@@ -121,7 +121,7 @@ function rewriteChatGptSteps(html: string): string {
           <li><strong>Enable Developer Mode:</strong> Settings \u2192 Plugins \u2192 Advanced \u2192 Developer mode</li>
           <li><strong>Add this plugin:</strong> Settings \u2192 Plugins \u2192 Browse plugins, then add: ${url}</li>
           <li><strong>Use in conversations:</strong> Choose the plugin from the Plus menu</li>
-          <li><strong>After a server update:</strong> Start a new chat. If tools look stale, turn the plugin off and on so ChatGPT reloads the tool list</li>
+          <li><strong>After 1.5.0:</strong> Tool names changed to snake_case. Start a new chat. If tools look stale, turn the plugin off and on so ChatGPT reloads the list</li>
         </ol>
       ${close}`;
     },

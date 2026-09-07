@@ -17,10 +17,10 @@ const recurringTopics = ["status", "list"] as const;
 const weekDays = ["Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday", "Sunday"];
 
 export default function RecurringView() {
-  const view = useToolContext<"show-recurring">();
-  const reload = useCallTool("list-recurring-tasks");
-  const save = useCallTool("save-recurring-task");
-  const remove = useCallTool("delete-recurring-task");
+  const view = useToolContext<"show_recurring">();
+  const reload = useCallTool("list_recurring_tasks");
+  const save = useCallTool("save_recurring_task");
+  const remove = useCallTool("delete_recurring_task");
   const [state, setState] = useViewState({ topics: view.toolInput?.topics ?? [] });
   const [description, setDescription] = useState("");
   const [project, setProject] = useState("");

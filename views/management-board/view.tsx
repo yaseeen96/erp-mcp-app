@@ -19,9 +19,9 @@ import {
 const managementTopics = ["status", "departments", "rankings"] as const;
 
 export default function ManagementBoardView() {
-  const view = useToolContext<"show-management-board">();
-  const reload = useCallTool("get-management-dashboard");
-  const employeeDay = useCallTool("get-employee-day");
+  const view = useToolContext<"show_management_board">();
+  const reload = useCallTool("get_management_dashboard");
+  const employeeDay = useCallTool("get_employee_day");
   const seriesColors = useBrandSeriesColors();
   const [state, setState] = useViewState({
     date: view.toolInput?.date ?? "",

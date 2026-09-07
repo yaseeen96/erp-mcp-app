@@ -20,9 +20,9 @@ import {
 const teamTopics = ["presence", "hours", "people"] as const;
 
 export default function TeamBoardView() {
-  const view = useToolContext<"show-team-board">();
-  const reload = useCallTool("get-team-dashboard");
-  const employeeDay = useCallTool("get-employee-day");
+  const view = useToolContext<"show_team_board">();
+  const reload = useCallTool("get_team_dashboard");
+  const employeeDay = useCallTool("get_employee_day");
   const [state, setState] = useViewState({
     date: view.toolInput?.date ?? "",
     topics: view.toolInput?.topics ?? [],

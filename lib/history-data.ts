@@ -1,7 +1,7 @@
 import * as attendance from "./attendance.js";
 import {
   calendarContext,
-  describeRange,
+  describeSpokenRange,
   eachIsoDate,
   formatDateLabel,
   hasDateFilter,
@@ -12,6 +12,7 @@ import {
 import type { HistoryExportDay } from "./export-files.js";
 import {
   employeeName,
+  speakDayLine,
   summarizeDay,
   summarizeHistory,
   tasksFromDetail,
@@ -134,14 +135,16 @@ export async function loadHistoryRange(ctx: AttendanceCtx, args: DateFilter) {
   const attendedDays = days.filter((day) => day.attended).length;
   const calendar = calendarContext(range.today);
   const hours = days.reduce((sum, day) => sum + day.hours, 0);
-  const attendedLabels = days.filter((day) => day.attended).map((day) => formatDateLabel(day.date));
   return {
     data: {
       summary: [
-        `${describeRange(range)}.`,
-        `${employee} attended ${attendedDays} of ${days.length} days${attendedLabels.length ? ` (${attendedLabels.join(", ")})` : ""}.`,
-        `${hours.toFixed(1)}h recorded.`,
-      ].join(" "),
+        describeSpokenRange(range),
+        `${employee} attended ${attendedDays} of ${days.length} days.`,
+        `${hours.toFixed(1)} hours recorded.`,
+        days.map((day) => speakDayLine(day)).join(" "),
+      ]
+        .filter(Boolean)
+        .join(" "),
       employeeName: employee,
       hasMore: false,
       from: range.from,

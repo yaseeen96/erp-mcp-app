@@ -1,4 +1,4 @@
-import { calendarContext, formatDateLabel, weekdayShort } from "./calendar.js";
+import { calendarContext, formatDateLabel, formatSpokenDate, weekdayShort } from "./calendar.js";
 import type { JsonRecord } from "./types.js";
 
 export function asRecord(value: unknown): JsonRecord | undefined {
@@ -35,6 +35,87 @@ export function employeeName(source: unknown): string {
   return stringValue(record?.employee_name, stringValue(record?.name, "Employee"));
 }
 
+export type HistoryTask = {
+  description: string;
+  status: string;
+  project: string;
+  actualTime: string;
+};
+
+/** Strip seconds from HH:MM:SS so voice can say "9:12". */
+export function spokenTime(value: string) {
+  const text = value.trim();
+  if (!text) {
+    return "";
+  }
+  const hhmm = text.match(/^(\d{1,2}):(\d{2})/);
+  if (hhmm) {
+    return `${Number(hhmm[1])}:${hhmm[2]}`;
+  }
+  return text;
+}
+
+export function spokenTaskList(tasks: HistoryTask[]) {
+  if (!tasks.length) {
+    return "No tasks.";
+  }
+  return `Tasks: ${tasks
+    .map((task) => {
+      const project = task.project.trim();
+      return `${task.description}${project ? ` on ${project}` : ""} (${task.status})`;
+    })
+    .join("; ")}.`;
+}
+
+export function spokenPersonLine(row: {
+  name: string;
+  status: string;
+  login: string;
+  logout: string;
+  hours?: number;
+}) {
+  const name = row.name || "Employee";
+  const status = row.status.replaceAll("_", " ");
+  if (status === "missing") {
+    return `${name} missing`;
+  }
+  if (status === "leave") {
+    return `${name} on leave`;
+  }
+  const login = spokenTime(row.login);
+  const logout = spokenTime(row.logout);
+  if (status === "late") {
+    return login ? `${name} late, in at ${login}` : `${name} late`;
+  }
+  if (logout) {
+    return `${name} in at ${login || "unknown"}, out at ${logout}`;
+  }
+  if (login) {
+    return `${name} in at ${login}`;
+  }
+  return `${name} ${status}`;
+}
+
+export function speakDayLine(day: {
+  date: string;
+  login: string;
+  logout: string;
+  hours: number;
+  attended?: boolean;
+  tasks?: HistoryTask[];
+}) {
+  const label = formatSpokenDate(day.date) || day.date;
+  const attended = day.attended ?? (Boolean(day.login) || day.hours > 0);
+  if (!attended) {
+    return `${label}: absent.`;
+  }
+  const login = spokenTime(day.login);
+  const logout = spokenTime(day.logout);
+  const hours = `${day.hours.toFixed(1)} hours`;
+  const tasks = day.tasks?.length ? ` ${spokenTaskList(day.tasks)}` : "";
+  return `${label}: in ${login || "unknown"}, out ${logout || "not yet"}, ${hours}.${tasks}`;
+}
+
 export function summarizeToday(page: JsonRecord) {
   const tasks = asArray(page.tasks);
   const done = tasks.filter((task) => asRecord(task)?.status === "Done").length;
@@ -58,8 +139,15 @@ export function summarizeToday(page: JsonRecord) {
 
   const date = stringValue(page.date);
   const calendar = calendarContext();
+  const dateLabel = formatSpokenDate(date || calendar.today) || date || calendar.today;
+  const login = spokenTime(stringValue(page.login_time));
+  const loginBit = login ? ` In at ${login}.` : "";
+  const tasksBit = `${done} of ${tasks.length} tasks done.`;
+  const projectsBit = projectNames.length ? ` Projects: ${projectNames.join(", ")}.` : "";
+  const leave = stringValue(page.leave_today);
+  const leaveBit = leave ? ` Leave: ${leave}.` : "";
   return {
-    summary: `${formatDateLabel(date || calendar.today)} · ${status} · ${done}/${tasks.length} tasks`,
+    summary: `${dateLabel}. ${employee} is ${status}.${loginBit} ${tasksBit}${projectsBit}${leaveBit}`,
     date,
     weekday: weekdayShort(date || calendar.today),
     calendar,
@@ -115,8 +203,23 @@ export function summarizeTeam(board: JsonRecord) {
   });
 
   const names = people.map((row) => row.name).filter(Boolean);
+  const dateLabel = formatSpokenDate(stringValue(board.date)) || stringValue(board.date);
+  const roster = people
+    .filter((row) => row.name)
+    .map((row) => spokenPersonLine(row))
+    .join(". ");
+  const kpiBits = [`${checkedIn} in`, `${missing} missing`];
+  if (late) {
+    kpiBits.push(`${late} late`);
+  }
+  if (onLeave) {
+    kpiBits.push(`${onLeave} on leave`);
+  }
+  const spoken = roster
+    ? `${dateLabel}. ${roster}. ${kpiBits.join(", ")}.`
+    : `${dateLabel}. No teammates. ${kpiBits.join(", ")}.`;
   return {
-    summary: `${stringValue(board.date)} · ${names.join(", ") || "no teammates"} · ${checkedIn} in · ${late} late · ${missing} missing`,
+    summary: spoken,
     date: stringValue(board.date),
     kpis: {
       total: numberValue(summary.total, employees.length),
@@ -178,8 +281,32 @@ export function summarizeManagement(board: JsonRecord) {
     };
   });
 
+  const dateLabel = formatSpokenDate(stringValue(board.date)) || stringValue(board.date);
+  const checkedIn = numberValue(summary.checked_in);
+  const total = numberValue(summary.total);
+  const missing = numberValue(summary.missing);
+  const deptLines = deptBars
+    .map((row) => `${row.name} ${row.checkedIn} in, ${row.missing} missing`)
+    .join(". ");
+  const rankLines = rankings
+    .slice(0, 8)
+    .map((row) => {
+      const record = asRecord(row) ?? {};
+      const name = stringValue(record.employee_name);
+      const hours = (numberValue(record.net_minutes) / 60).toFixed(1);
+      return name ? `${name} ${hours} hours` : "";
+    })
+    .filter(Boolean)
+    .join(", ");
+  const spoken = [
+    `${dateLabel}. ${checkedIn} of ${total} in, ${missing} missing.`,
+    deptLines ? `Departments: ${deptLines}.` : "",
+    rankLines ? `Hours: ${rankLines}.` : "",
+  ]
+    .filter(Boolean)
+    .join(" ");
   return {
-    summary: `${stringValue(board.date)} · ${numberValue(summary.checked_in)}/${numberValue(summary.total)} in · ${numberValue(summary.missing)} missing`,
+    summary: spoken,
     date: stringValue(board.date),
     kpis: {
       total: numberValue(summary.total),
@@ -210,13 +337,6 @@ export function summarizeManagement(board: JsonRecord) {
     },
   };
 }
-
-export type HistoryTask = {
-  description: string;
-  status: string;
-  project: string;
-  actualTime: string;
-};
 
 export function tasksFromDetail(detail: JsonRecord): HistoryTask[] {
   return asArray(detail.tasks).flatMap((row) => {
@@ -260,9 +380,11 @@ export function summarizeHistory(
   const totalDone = days.reduce((sum, day) => sum + day.done, 0);
   const totalTasks = days.reduce((sum, day) => sum + day.total, 0);
 
+  const chronological = [...days].reverse();
+  const spokenDays = chronological.map((day) => speakDayLine(day)).join(" ");
   return {
     summary: latest
-      ? `${days.length} days · ${totalHours.toFixed(1)}h · ${totalDone}/${totalTasks} tasks`
+      ? `${employee}. ${days.length} days, ${totalHours.toFixed(1)} hours, ${totalDone} of ${totalTasks} tasks done. ${spokenDays}`
       : "No attendance history yet.",
     employeeName: employee,
     hasMore: boolValue(history.has_more),
@@ -312,8 +434,11 @@ export function summarizeRecurring(rows: unknown[]) {
     ];
   });
   const active = templates.filter((row) => row.active).length;
+  const names = templates.map((row) => row.description).filter(Boolean);
   return {
-    summary: `${templates.length} recurring templates, ${active} active.`,
+    summary: names.length
+      ? `${templates.length} recurring templates, ${active} active. ${names.join("; ")}.`
+      : `${templates.length} recurring templates, ${active} active.`,
     count: templates.length,
     active,
     inactive: templates.length - active,
@@ -345,8 +470,16 @@ export function summarizeAdditional(result: JsonRecord) {
     byDate.set(entry.date, (byDate.get(entry.date) ?? 0) + entry.hours);
   }
   const totalHours = numberValue(result.total_hours, entries.reduce((sum, row) => sum + row.hours, 0));
+  const lines = entries
+    .map((row) => {
+      const when = formatSpokenDate(row.date) || row.date;
+      return `${when}: ${row.description}${row.project ? ` on ${row.project}` : ""}, ${row.hours.toFixed(1)} hours`;
+    })
+    .join(". ");
   return {
-    summary: `${entries.length} additional-work rows, ${totalHours}h on this page.`,
+    summary: lines
+      ? `${entries.length} additional-work rows, ${totalHours} hours. ${lines}.`
+      : `${entries.length} additional-work rows, ${totalHours} hours on this page.`,
     totalHours,
     hasMore: boolValue(result.has_more),
     hoursChart: {
@@ -370,8 +503,13 @@ export function summarizeDay(detail: JsonRecord, employee = "Employee") {
   const hours = parseHours(eod.net_hours);
   const login = stringValue(morning.login_time);
   const logout = stringValue(eod.logout_time);
+  const dateLabel = formatSpokenDate(date) || date;
+  const inOut =
+    login || logout
+      ? `In ${spokenTime(login) || "unknown"}, out ${spokenTime(logout) || "not yet"}, ${hours.toFixed(1)} hours${boolValue(morning.is_late) ? ", late" : ""}.`
+      : "No check-in recorded.";
   return {
-    summary: `${formatDateLabel(date) || date} · ${hours.toFixed(1)}h · ${done}/${tasks.length} tasks`,
+    summary: `${employee}, ${dateLabel}. ${inOut} ${spokenTaskList(tasks)}`,
     date,
     weekday: weekdayShort(date),
     employeeName: employee,

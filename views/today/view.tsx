@@ -34,11 +34,11 @@ import {
 const todayTopics = ["hours", "tasks"] as const;
 
 export default function TodayView() {
-  const view = useToolContext<"show-today">();
-  const checkIn = useCallTool("check-in");
-  const checkOut = useCallTool("check-out");
-  const reset = useCallTool("reset-checkin");
-  const refresh = useCallTool("get-today");
+  const view = useToolContext<"show_today">();
+  const checkIn = useCallTool("check_in");
+  const checkOut = useCallTool("check_out");
+  const reset = useCallTool("reset_checkin");
+  const refresh = useCallTool("get_today");
   const [state, setState] = useViewState({ topics: view.toolInput?.topics ?? [] });
 
   const [projects, setProjects] = useState<DraftProject[]>([]);

@@ -12,6 +12,7 @@ import {
   projectNamesFromDrafts,
   takeDrafts,
 } from "../lib/task-drafts.js";
+import { usage } from "../lib/tool-docs.js";
 import { frappeFailure } from "../lib/tool-utils.js";
 import type { AttendanceCtx, FrappeUser } from "../lib/types.js";
 
@@ -100,10 +101,17 @@ const confirmSchema = z.object({
 export function registerAttendanceWriteTools(server: MCPServer<FrappeUser> | MCPServer) {
   const checkIn = server.tool(
     {
-      name: "check-in",
+      name: "check_in",
       title: "Check in",
-      description:
-        "Punch in for today. Call this immediately when they say check in, start the day, or punch in — planning is optional. Pass any projects/tasks they named. Also includes work already saved with add-tasks. Do not also call add-tasks. WFH needs an Attendance Request except Saturday/hybrid routine days.",
+      description: usage(
+        "Punch in for today.",
+        [
+          "CRITICAL: Call this immediately when they say check in, start the day, or punch in. Planning is optional.",
+          "MUST pass any projects/tasks they named in this same call.",
+          "IMPORTANT: Also includes work already saved with add_tasks. Do not also call add_tasks.",
+          "WFH needs an Attendance Request except Saturday/hybrid routine days.",
+        ]
+      ),
       inputSchema: z.object({
         projects: z
           .array(projectGroup)
@@ -135,7 +143,7 @@ export function registerAttendanceWriteTools(server: MCPServer<FrappeUser> | MCP
           return fail("Already checked out today.");
         }
         if (page.morning_done === true || page.morning_done === 1) {
-          return fail("Already checked in. Add more work with add-tasks (saved for check-out) or call check-out.");
+          return fail("Already checked in. Add more work with add_tasks (saved for check_out) or call check_out.");
         }
         const date = attendanceDate(stringValue(page.date));
         const staged = listDrafts(attendanceCtx, date, "morning");
@@ -168,10 +176,16 @@ export function registerAttendanceWriteTools(server: MCPServer<FrappeUser> | MCP
 
   const checkOut = server.tool(
     {
-      name: "check-out",
+      name: "check_out",
       title: "Check out",
-      description:
-        "Finish the day: lunch, task updates, and any extra projects/tasks in this one call. Includes extras already saved with add-tasks after check-in. Do not also call add-tasks.",
+      description: usage(
+        "Finish the day: lunch, task updates, and any extra projects/tasks.",
+        [
+          "CRITICAL: Call this when they say check out or finish the day.",
+          "MUST include extras already saved with add_tasks after check_in in this one call.",
+          "MUST NOT also call add_tasks.",
+        ]
+      ),
       inputSchema: z.object({
         lunch_from: z.string().describe("Lunch start time, e.g. 13:00"),
         lunch_to: z.string().describe("Lunch end time, e.g. 13:30"),
@@ -230,10 +244,12 @@ export function registerAttendanceWriteTools(server: MCPServer<FrappeUser> | MCP
 
   const resetCheckin = server.tool(
     {
-      name: "reset-checkin",
+      name: "reset_checkin",
       title: "Reset check-in",
-      description:
-        "Reset today's morning check-in before EOD. Deletes the ST Daily Checkin IN punch and unlocks the log. Requires confirm=true.",
+      description: usage(
+        "Reset today's morning check-in before EOD. Deletes the ST Daily Checkin IN punch and unlocks the log.",
+        ["CRITICAL: Requires confirm=true. This cannot be undone from the MCP server."]
+      ),
       inputSchema: confirmSchema,
       outputSchema: z.object({ success: z.boolean() }),
       annotations: { readOnlyHint: false, destructiveHint: true, openWorldHint: true },
@@ -250,9 +266,11 @@ export function registerAttendanceWriteTools(server: MCPServer<FrappeUser> | MCP
 
   const updateHalfDay = server.tool(
     {
-      name: "update-half-day",
+      name: "update_half_day",
       title: "Update half-day session",
-      description: "Set or change the half-day session on an already submitted morning check-in.",
+      description: usage("Set or change the half-day session on an already submitted morning check-in.", [
+        "MUST pass session as First Half or Second Half.",
+      ]),
       inputSchema: z.object({
         session: z.enum(["First Half", "Second Half"]).describe("Half-day session"),
       }),
@@ -271,9 +289,11 @@ export function registerAttendanceWriteTools(server: MCPServer<FrappeUser> | MCP
 
   const saveRecurring = server.tool(
     {
-      name: "save-recurring-task",
+      name: "save_recurring_task",
       title: "Save recurring task",
-      description: "Create or update a recurring task template for the signed-in employee.",
+      description: usage("Create or update a recurring task template for the signed-in employee.", [
+        "IMPORTANT: Use show_recurring first if they asked to see templates.",
+      ]),
       inputSchema: z.object({
         name: z.string().optional().describe("Existing template name to update"),
         description: z.string().describe("Task description"),
@@ -304,9 +324,11 @@ export function registerAttendanceWriteTools(server: MCPServer<FrappeUser> | MCP
 
   const deleteRecurring = server.tool(
     {
-      name: "delete-recurring-task",
+      name: "delete_recurring_task",
       title: "Delete recurring task",
-      description: "Delete one of the signed-in employee's recurring task templates. Requires confirm=true.",
+      description: usage("Delete one of the signed-in employee's recurring task templates.", [
+        "CRITICAL: Requires confirm=true.",
+      ]),
       inputSchema: confirmSchema.extend({
         name: z.string().describe("Recurring Task Template name"),
       }),
@@ -325,9 +347,11 @@ export function registerAttendanceWriteTools(server: MCPServer<FrappeUser> | MCP
 
   const saveAdditional = server.tool(
     {
-      name: "save-additional-work",
+      name: "save_additional_work",
       title: "Save additional work",
-      description: "Create or update an Additional Work entry for the signed-in employee.",
+      description: usage("Create or update an Additional Work entry for the signed-in employee.", [
+        "IMPORTANT: Use show_additional_work first if they asked to see extra hours.",
+      ]),
       inputSchema: z.object({
         name: z.string().optional(),
         work_date: z.string().describe("Work date YYYY-MM-DD"),
@@ -355,9 +379,9 @@ export function registerAttendanceWriteTools(server: MCPServer<FrappeUser> | MCP
 
   const deleteAdditional = server.tool(
     {
-      name: "delete-additional-work",
+      name: "delete_additional_work",
       title: "Delete additional work",
-      description: "Delete an Additional Work entry. Requires confirm=true.",
+      description: usage("Delete an Additional Work entry.", ["CRITICAL: Requires confirm=true."]),
       inputSchema: confirmSchema.extend({
         name: z.string().describe("Additional Work name"),
       }),
@@ -376,10 +400,17 @@ export function registerAttendanceWriteTools(server: MCPServer<FrappeUser> | MCP
 
   const addTasks = server.tool(
     {
-      name: "add-tasks",
+      name: "add_tasks",
       title: "Add tasks",
-      description:
-        "Save one or many projects and their tasks without checking in. When they asked you to research or plan a product, search the web and talk it through first, then call this with the real task list — not a placeholder. Multiple calls merge. When they later say check in, call check-in — not this tool. If already checked in, these wait for check-out.",
+      description: usage(
+        "Save one or many projects and their tasks without punching in.",
+        [
+          "CRITICAL: This does not check them in. MUST call add_tasks when they asked to plan or add tasks only.",
+          "MUST search and talk through a real task list when they asked you to research a product — not a placeholder.",
+          "When they later say check in, MUST call check_in — not this tool.",
+          "Multiple calls merge. If already checked in, these wait for check_out.",
+        ]
+      ),
       inputSchema: z.object({
         projects: z
           .array(projectGroup)
@@ -401,7 +432,7 @@ export function registerAttendanceWriteTools(server: MCPServer<FrappeUser> | MCP
         projectCount: z.number(),
         projectNames: z.array(z.string()),
         projectName: z.string().optional(),
-        queuedFor: z.enum(["check-in", "check-out"]),
+        queuedFor: z.enum(["check_in", "check_out"]),
         tasks: z.array(
           z.object({
             description: z.string(),
@@ -421,12 +452,12 @@ export function registerAttendanceWriteTools(server: MCPServer<FrappeUser> | MCP
           return fail("Add at least one task, either under projects or in tasks.");
         }
         if (page.eod_done === true || page.eod_done === 1) {
-          return fail("Already checked out today. Extra work goes in save-additional-work or tomorrow's check-in.");
+          return fail("Already checked out today. Extra work goes in save_additional_work or tomorrow's check_in.");
         }
         const date = attendanceDate(stringValue(page.date));
-        const queuedFor: "check-in" | "check-out" =
-          page.morning_done === true || page.morning_done === 1 ? "check-out" : "check-in";
-        const staged = addDrafts(attendanceCtx, date, queuedFor === "check-out" ? "eod" : "morning", incoming);
+        const queuedFor: "check_in" | "check_out" =
+          page.morning_done === true || page.morning_done === 1 ? "check_out" : "check_in";
+        const staged = addDrafts(attendanceCtx, date, queuedFor === "check_out" ? "eod" : "morning", incoming);
         const snapshot = plannedSnapshot(staged);
         const data = {
           success: true,
@@ -442,9 +473,9 @@ export function registerAttendanceWriteTools(server: MCPServer<FrappeUser> | MCP
           `Saved ${incoming.length} task${incoming.length === 1 ? "" : "s"} for ${snapshot.projectNames.length || 0} project${
             snapshot.projectNames.length === 1 ? "" : "s"
           }${snapshot.projectNames.length ? ` (${snapshot.projectNames.join(", ")})` : ""}. ${
-            queuedFor === "check-in"
-              ? "Not checked in. Call check-in when they ask to start the day."
-              : "Already checked in — these go out with check-out."
+            queuedFor === "check_in"
+              ? "Not checked in. Call check_in when they ask to start the day."
+              : "Already checked in — these go out with check_out."
           }`,
           data
         );
@@ -456,9 +487,11 @@ export function registerAttendanceWriteTools(server: MCPServer<FrappeUser> | MCP
 
   const deleteCarried = server.tool(
     {
-      name: "delete-carried-task",
+      name: "delete_carried_task",
       title: "Delete carried task",
-      description: "Delete a carried Task Entry from today's log before EOD. Requires confirm=true.",
+      description: usage("Delete a carried Task Entry from today's log before EOD.", [
+        "CRITICAL: Requires confirm=true.",
+      ]),
       inputSchema: confirmSchema.extend({
         name: z.string().describe("Task Entry name"),
       }),

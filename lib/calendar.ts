@@ -248,6 +248,44 @@ export function formatDateLabel(iso: string) {
   return iso ? `${weekdayShort(iso)} ${iso}` : "";
 }
 
+/** Voice-ready date, e.g. "Tuesday 8 September 2026". */
+export function formatSpokenDate(iso: string) {
+  if (!iso) {
+    return "";
+  }
+  const { year, month, day } = parts(iso);
+  return `${weekdayLong(iso)} ${day} ${MONTH_NAMES[month - 1]} ${year}`;
+}
+
+export function describeSpokenRange(range: ResolvedRange) {
+  const from = formatSpokenDate(range.from);
+  const to = formatSpokenDate(range.to);
+  if (range.from === range.to) {
+    if (range.period === "today") {
+      return `Today ${from}.`;
+    }
+    if (range.period === "yesterday") {
+      return `Yesterday ${from}.`;
+    }
+    return `${from}.`;
+  }
+  const span = `${from} to ${to}`;
+  if (range.period === "this_week") {
+    return `This week ${span}.`;
+  }
+  if (range.period === "last_week") {
+    return `Last week ${span}.`;
+  }
+  if (range.period === "this_month") {
+    return `This month ${span}.`;
+  }
+  if (range.period === "last_month" || range.period === "month") {
+    const { year, month } = parts(range.from);
+    return `${MONTH_NAMES[month - 1]} ${year}, ${span}.`;
+  }
+  return `${span}.`;
+}
+
 export function describeRange(range: ResolvedRange) {
   return `${range.label} (today ${formatDateLabel(range.today)}, ${range.timezone})`;
 }
@@ -537,7 +575,7 @@ export function resolveSingleDate(args: { date?: string; when?: string }, today 
     const range = parseWhen(args.when, today);
     if (range.from !== range.to) {
       throw new Error(
-        `"${args.when}" is ${range.label}. Use show-history or show-employee-history for more than one day.`
+        `"${args.when}" is ${range.label}. Use show_history or show_employee_history for more than one day.`
       );
     }
     return range.from;

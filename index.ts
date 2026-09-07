@@ -6,6 +6,7 @@ import { env } from "./lib/env.js";
 import { createFrappeOAuthProvider } from "./lib/frappe-oauth.js";
 import { mountAuthorizeProxy } from "./lib/oauth-authorize.js";
 import type { FrappeUser } from "./lib/types.js";
+import { registerAttendanceResources } from "./lib/resources.js";
 import { registerPlanProjectPrompt } from "./prompts/plan-project.js";
 import { registerAttendanceReadTools } from "./tools/attendance-read.js";
 import { registerAttendanceWriteTools } from "./tools/attendance-write.js";
@@ -13,10 +14,40 @@ import { registerAttendanceWriteTools } from "./tools/attendance-write.js";
 const config = {
   name: "erp-mcp-app",
   title: "ST Attendance",
-  version: "1.4.3",
+  version: "1.5.0",
   description: "Per-user ERPNext attendance MCP App for ST Attendance Tracker",
-  instructions:
-    "Read the current tool schemas. Dates are Asia/Kolkata. Pass when= their date words unchanged (today, yesterday, this week, last week, this month, August, 1 September, 18/08/2026). Do not convert dates or invent weekdays — trust weekday fields on the result. Weeks are Monday–Sunday. Precise ask → one tool. Who is on my team / teammate names → list-teammates once, then speak every name. Named person + one day (what did X work on yesterday) → show-employee-day once with employeeName and when=. Named person + week/month or how many days X attended → show-employee-history once with when=. Never invent a Team-Leader permission error — call the teammate tool. Never use show-team-board for one named person. My day/week/month → show-history once with when=. Never loop show-day or show-employee-day. Export PDF/Excel → export-history once with the same when=. Vague ask → one short question. Two tools only if they asked for two outcomes. Route: today → show-today. See one personal day in detail → show-day. Whole team roster → show-team-board. HR → show-management-board. Recurring → show-recurring. Extra hours → show-additional-work. Projects → show-projects. Plan without punch → add-tasks. Punch in → check-in. Finish day → check-out. Destructive tools need confirm=true.",
+  instructions: `# ST Attendance
+
+CRITICAL: Dates are Asia/Kolkata. Weeks are Monday–Sunday. Pass when= their date words unchanged (today, yesterday, this week, last week, this month, August, 1 September, 18/08/2026). MUST NOT convert dates or invent weekdays — trust weekday fields on the result.
+
+CRITICAL: Result content is the spoken script. Read it aloud. MUST NOT invent names, weekdays, or hours from a View.
+
+## Tools
+
+| They said | Call |
+| --- | --- |
+| who is on my team / names | list_teammates once; speak every name. Also resource://teammates |
+| how is my team doing | show_team_board (text roster, no View) |
+| what did X work on / X this week | show_employee_day or show_employee_history once with when= |
+| check in / punch in | check_in |
+| check out / finish day | check_out |
+| plan / add tasks, no punch | add_tasks |
+| export / PDF / Excel | export_history once with when= and format= |
+| today / am I in | show_today (View OK) |
+| my day / week / month | show_history once with when= |
+| HR company board | show_management_board |
+| recurring | show_recurring (View OK) |
+| extra hours | show_additional_work (View OK) |
+| projects | show_projects (View OK) or resource://projects |
+
+## Usage Requirements
+- Precise ask → one tool. Vague ask → one short question.
+- Two tools only if they asked for two outcomes.
+- MUST NOT invent a Team-Leader permission error — call the teammate tool.
+- MUST NOT use show_team_board for one named person.
+- MUST NOT loop show_day or show_employee_day.
+- Views exist only on show_today, show_recurring, show_additional_work, and show_projects.
+- Destructive tools need confirm=true.`,
   websiteUrl: env.erpnextUrl,
   favicon: "favicon.jpg",
   icons: [
@@ -45,6 +76,7 @@ if (env.oauthEnabled) {
 }
 
 export const planProject = registerPlanProjectPrompt(server);
+registerAttendanceResources(server);
 const readTools = registerAttendanceReadTools(server);
 const writeTools = registerAttendanceWriteTools(server);
 

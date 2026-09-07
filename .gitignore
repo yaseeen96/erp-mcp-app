@@ -41,7 +41,9 @@ data/
 # Local reference checkouts (not used at build or runtime)
 references/mcp/
 references/st_attendance_tracker/
-
+references/modelcontextprotocol/
+references/DESIGN_GUIDELINES.md
+references/MODELCONTEXTPROTOCOL.md
 # IDE
 .vscode/
 .idea/

@@ -1,7 +1,7 @@
 import * as attendance from "./attendance.js";
 import {
   calendarContext,
-  describeRange,
+  describeSpokenRange,
   eachIsoDate,
   formatDateLabel,
   resolveDateRange,
@@ -12,6 +12,7 @@ import { FrappeRequestError } from "./frappe-client.js";
 import {
   asArray,
   asRecord,
+  speakDayLine,
   summarizeEmployeeDay,
   stringValue,
   type HistoryTask,
@@ -204,16 +205,16 @@ export async function loadEmployeeHistory(ctx: AttendanceCtx, args: EmployeeRang
       )
     ),
   ];
-  const attendedLabels = rows
-    .filter((row) => row.attended)
-    .map((row) => formatDateLabel(row.date));
   const calendar = calendarContext(range.today);
   const hours = rows.reduce((sum, row) => sum + row.hours, 0);
   const summary = [
-    `${describeRange(range)}.`,
-    `${employee.name} attended ${attendedDays} of ${rows.length} days${attendedLabels.length ? ` (${attendedLabels.join(", ")})` : ""}.`,
-    `${hours.toFixed(1)}h recorded.`,
-  ].join(" ");
+    describeSpokenRange(range),
+    `${employee.name} attended ${attendedDays} of ${rows.length} days.`,
+    `${hours.toFixed(1)} hours recorded.`,
+    rows.map((row) => speakDayLine(row)).join(" "),
+  ]
+    .filter(Boolean)
+    .join(" ");
 
   return {
     summary,

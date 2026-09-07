@@ -1,6 +1,8 @@
 # ST Attendance MCP App
 
-Per-user MCP App for [ST Attendance Tracker](https://st-erpv15.frappe.cloud/) on ERPNext v15. Employees sign in on the Frappe login page with **Google** or **email and password**. Tools and Views call `st_attendance_tracker.api` as that user.
+Per-user MCP App for [ST Attendance Tracker](https://st-erpv15.frappe.cloud/) on ERPNext v15. Employees sign in on the Frappe login page with **Google** or **email and password**. Tools call `st_attendance_tracker.api` as that user.
+
+**1.5.0 is a breaking rename.** Reconnect ChatGPT, Claude, Cursor, and other hosts after upgrade. Tool names are now `snake_case` (`show_today`, `list_teammates`, `check_in`).
 
 ## Run locally
 
@@ -21,24 +23,22 @@ Default Redirect URI (separate field, one URL): `https://attendance.mcp.standard
 
 Scopes: `all openid`
 
-## Views
+## Tools and Views
+
+Ask/report tools return a **spoken script** in `content` (every name, weekday, hours, tasks). Voice and chat must use that text. **Views exist only** on these four interactive workspaces:
 
 | Tool | What it opens |
 | --- | --- |
-| `show-today` | Check-in / EOD workspace |
-| `show-day` | One personal date |
-| `show-history` | Recent days and hours trend |
-| `list-teammates` | Names of people on your team |
-| `show-employee-day` | One teammate's day (name or Employee ID) |
-| `show-employee-history` | One teammate's week or month |
-| `show-team-board` | Whole-team roster (not one named person) |
-| `show-management-board` | HR company board |
-| `show-projects` | Project groups |
-| `show-recurring` | Recurring templates |
-| `show-additional-work` | Extra hours |
-| `export-history` | Excel / PDF (`date` for one day, `from`+`to` for a range) |
+| `show_today` | Check-in / EOD workspace |
+| `show_recurring` | Recurring templates |
+| `show_additional_work` | Extra hours form |
+| `show_projects` | Pick projects and add tasks |
 
-Writes: `add-tasks` saves projects and tasks without punching in. `check-in` starts the day and sends planned work. `check-out` finishes the day. Destructive tools need `confirm=true`.
+Text-only (no View): `list_teammates`, `show_team_board`, `show_management_board`, `show_employee_day`, `show_employee_history`, `show_day`, `show_history`, `export_history`.
+
+Resources: `resource://teammates`, `resource://projects`.
+
+Writes: `add_tasks` saves projects and tasks without punching in. `check_in` starts the day and sends planned work. `check_out` finishes the day. Destructive tools need `confirm=true`.
 
 ## Deploy
 

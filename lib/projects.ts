@@ -111,9 +111,10 @@ export function summarizeProjects(
     return left.name.localeCompare(right.name);
   });
 
+  const names = projects.map((row) => row.name).filter(Boolean);
   return {
     summary: projects.length
-      ? `${projects.length} projects. ${projects.filter((row) => row.todayCount).length} have tasks today${
+      ? `${projects.length} projects: ${names.join(", ")}. ${projects.filter((row) => row.todayCount).length} have tasks today${
           planned.length ? `. ${planned.length} planned` : ""
         }.`
       : "No projects yet. Add one and put tasks on it.",

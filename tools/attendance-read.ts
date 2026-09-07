@@ -3,13 +3,14 @@ import { z } from "zod";
 import * as attendance from "../lib/attendance.js";
 import { buildHistoryExcel, buildHistoryPdf } from "../lib/export-files.js";
 import { storeExportFile } from "../lib/export-store.js";
-import { hasDateFilter, resolveSingleDate } from "../lib/calendar.js";
+import { formatSpokenDate, hasDateFilter, resolveSingleDate } from "../lib/calendar.js";
 import { loadEmployeeHistory, resolveEmployee } from "../lib/employee-range.js";
 import { loadHistoryExport, loadHistoryPage, loadHistoryRange } from "../lib/history-data.js";
 import { loadProjects } from "../lib/projects.js";
 import { resolveWorkLocationConfig } from "../lib/work-location.js";
 import { ok } from "../lib/result.js";
 import { attendanceDate, listDrafts, plannedSnapshot } from "../lib/task-drafts.js";
+import { EMPLOYEE_NAME_FIELD, WHEN_FIELD, usage } from "../lib/tool-docs.js";
 import { frappeFailure } from "../lib/tool-utils.js";
 import type { AttendanceCtx, FrappeUser } from "../lib/types.js";
 import {
@@ -42,12 +43,7 @@ const calendarOutput = z.object({
   timezone: z.string(),
 });
 
-const whenInput = z
-  .string()
-  .optional()
-  .describe(
-    "Pass their date words unchanged. Examples: today, yesterday, this week, last week, this month, last month, August, 1 September, 18/08/2026, last 7 days. Do not convert to ISO or guess weekdays. Asia/Kolkata. Weeks Mon–Sun. Dates are DD/MM/YYYY."
-  );
+const whenInput = z.string().optional().describe(WHEN_FIELD);
 
 const periodInput = z
   .enum(["today", "yesterday", "this_week", "last_week", "this_month", "last_month"])
@@ -233,7 +229,7 @@ const projectTopics = z
 const historyTopics = z
   .array(z.enum(["days", "hours", "tasks", "attendance"]))
   .optional()
-  .describe("Omit for the full history UI. Same slices as export-history.");
+  .describe("Omit for the full history UI. Same slices as export_history.");
 
 const dayOutput = z.object({
   summary: z.string(),
@@ -405,9 +401,9 @@ async function loadToday(ctx: AttendanceCtx) {
 export function registerAttendanceReadTools(server: MCPServer<FrappeUser> | MCPServer) {
   const getToday = server.tool(
     {
-      name: "get-today",
+      name: "get_today",
       title: "Get today",
-      description: "View helper: reload today's work log. Models must use show-today instead.",
+      description: "View helper: reload today's work log. Models MUST use show_today instead.",
       visibility: "app",
       inputSchema: z.object({}),
       outputSchema: todayOutput,
@@ -424,9 +420,9 @@ export function registerAttendanceReadTools(server: MCPServer<FrappeUser> | MCPS
 
   const getTeamBoard = server.tool(
     {
-      name: "get-team-dashboard",
+      name: "get_team_dashboard",
       title: "Get team dashboard",
-      description: "View helper: reload the team board. Models must use show-team-board instead.",
+      description: "View helper: reload the team board. Models MUST use show_team_board instead.",
       visibility: "app",
       inputSchema: dateInput,
       outputSchema: teamOutput,
@@ -445,9 +441,9 @@ export function registerAttendanceReadTools(server: MCPServer<FrappeUser> | MCPS
 
   const getTeammates = server.tool(
     {
-      name: "get-teammates",
+      name: "get_teammates",
       title: "Get teammates",
-      description: "View helper: reload teammate names. Models must use list-teammates instead.",
+      description: "View helper: reload teammate names. Models MUST use list_teammates instead.",
       visibility: "app",
       inputSchema: dateInput,
       outputSchema: teammatesOutput,
@@ -466,9 +462,9 @@ export function registerAttendanceReadTools(server: MCPServer<FrappeUser> | MCPS
 
   const getManagementBoard = server.tool(
     {
-      name: "get-management-dashboard",
+      name: "get_management_dashboard",
       title: "Get management dashboard",
-      description: "View helper: reload the HR board. Models must use show-management-board instead.",
+      description: "View helper: reload the HR board. Models MUST use show_management_board instead.",
       visibility: "app",
       inputSchema: dateInput,
       outputSchema: managementOutput,
@@ -487,9 +483,9 @@ export function registerAttendanceReadTools(server: MCPServer<FrappeUser> | MCPS
 
   const getEmployeeDay = server.tool(
     {
-      name: "get-employee-day",
+      name: "get_employee_day",
       title: "Get employee day",
-      description: "View helper: one employee's day for board drill-in. Models must use show-employee-day instead.",
+      description: "View helper: one employee's day for board drill-in. Models MUST use show_employee_day instead.",
       visibility: "app",
       inputSchema: z.object({
         employeeName: z.string().describe("Employee ID, e.g. HR-EMP-00001"),
@@ -516,12 +512,12 @@ export function registerAttendanceReadTools(server: MCPServer<FrappeUser> | MCPS
 
   const getEmployeeHistory = server.tool(
     {
-      name: "get-employee-history",
+      name: "get_employee_history",
       title: "Get employee history",
-      description: "View helper: teammate week/range. Models must use show-employee-history instead.",
+      description: "View helper: teammate week/range. Models MUST use show_employee_history instead.",
       visibility: "app",
       inputSchema: z.object({
-        employeeName: z.string().describe("Teammate name or Employee ID, e.g. Maaz or HR-EMP-00001."),
+        employeeName: z.string().describe(EMPLOYEE_NAME_FIELD),
         ...dateFilterFields,
       }),
       outputSchema: employeeHistoryOutput,
@@ -547,9 +543,9 @@ export function registerAttendanceReadTools(server: MCPServer<FrappeUser> | MCPS
 
   const getHistory = server.tool(
     {
-      name: "get-history",
+      name: "get_history",
       title: "Get my history",
-      description: "View helper: reload history with task titles. Models must use show-history instead.",
+      description: "View helper: reload history with task titles. Models MUST use show_history instead.",
       visibility: "app",
       inputSchema: z.object({
         page: z.number().int().min(0).optional().describe("0-based page of 15 days. Default 0. Ignored when a date filter is set."),
@@ -575,9 +571,9 @@ export function registerAttendanceReadTools(server: MCPServer<FrappeUser> | MCPS
 
   const getHistoryDay = server.tool(
     {
-      name: "get-history-day",
+      name: "get_history_day",
       title: "Get history day",
-      description: "View helper: full task list for one past date. Models should use get-history instead.",
+      description: "View helper: full task list for one past date. Models should use get_history instead.",
       visibility: "app",
       inputSchema: z.object({
         date: z.string().describe("Date YYYY-MM-DD"),
@@ -607,9 +603,9 @@ export function registerAttendanceReadTools(server: MCPServer<FrappeUser> | MCPS
 
   const listProjects = server.tool(
     {
-      name: "list-projects",
+      name: "list_projects",
       title: "List projects",
-      description: "View helper: reload projects. Models must use show-projects instead.",
+      description: "View helper: reload projects. Models MUST use show_projects instead.",
       visibility: "app",
       inputSchema: z.object({}),
       outputSchema: projectOutput,
@@ -627,9 +623,9 @@ export function registerAttendanceReadTools(server: MCPServer<FrappeUser> | MCPS
 
   const listRecurring = server.tool(
     {
-      name: "list-recurring-tasks",
+      name: "list_recurring_tasks",
       title: "List recurring tasks",
-      description: "View helper: reload recurring templates. Models must use show-recurring instead.",
+      description: "View helper: reload recurring templates. Models MUST use show_recurring instead.",
       visibility: "app",
       inputSchema: z.object({}),
       outputSchema: recurringOutput,
@@ -648,9 +644,9 @@ export function registerAttendanceReadTools(server: MCPServer<FrappeUser> | MCPS
 
   const listAdditional = server.tool(
     {
-      name: "list-additional-work",
+      name: "list_additional_work",
       title: "List additional work",
-      description: "View helper: reload additional work. Models must use show-additional-work instead.",
+      description: "View helper: reload additional work. Models MUST use show_additional_work instead.",
       visibility: "app",
       inputSchema: z.object({
         page: z.number().int().min(0).optional().describe("0-based page. Default 0."),
@@ -671,10 +667,17 @@ export function registerAttendanceReadTools(server: MCPServer<FrappeUser> | MCPS
 
   const showToday = server.tool(
     {
-      name: "show-today",
+      name: "show_today",
       title: "Show today",
-      description:
-        "Today's status in Asia/Kolkata, with weekday and this week's Monday–Sunday bounds. Does not add tasks or check in. One call is enough — do not also call get-today or show-projects.",
+      description: usage(
+        "Today's attendance status in Asia/Kolkata, with weekday and this week's Monday–Sunday bounds.",
+        [
+          "CRITICAL: Call once when they ask about today or whether they are checked in.",
+          "MUST NOT add tasks or check in. This is read-only.",
+          "MUST NOT also call get_today or show_projects.",
+          "IMPORTANT: A View is OK here for the check-in / EOD form.",
+        ]
+      ),
       inputSchema: z.object({
         topics: todayTopics,
       }),
@@ -698,20 +701,22 @@ export function registerAttendanceReadTools(server: MCPServer<FrappeUser> | MCPS
 
   const showTeamBoard = server.tool(
     {
-      name: "show-team-board",
+      name: "show_team_board",
       title: "Show team board",
-      description:
-        "Whole-team roster only (who is in / late / missing). For names only use list-teammates. Never use this for one named person — that is show-employee-day or show-employee-history. One call is enough — do not also call get-team-dashboard.",
+      description: usage(
+        "Whole-team roster: who is in, late, or missing, by name.",
+        [
+          "CRITICAL: Read content aloud. It lists every teammate. MUST NOT invent names or hours.",
+          "MUST call this when they ask how the team is doing.",
+          "MUST NOT use this for one named person — that is show_employee_day or show_employee_history.",
+          "For names only, use list_teammates. MUST NOT also call get_team_dashboard.",
+          "IMPORTANT: No View. Voice and chat use the text result only.",
+        ]
+      ),
       inputSchema: dateInput.extend({
         topics: teamTopics,
       }),
       outputSchema: teamOutput,
-      view: {
-        name: "team-board",
-        description: "Team attendance board with charts",
-        prefersBorder: false,
-        csp: viewCsp,
-      },
       annotations: { readOnlyHint: true, destructiveHint: false, openWorldHint: true },
     },
     async ({ date }, ctx) => {
@@ -727,18 +732,19 @@ export function registerAttendanceReadTools(server: MCPServer<FrappeUser> | MCPS
 
   const listTeammates = server.tool(
     {
-      name: "list-teammates",
+      name: "list_teammates",
       title: "List teammates",
-      description:
-        "Names of people on your team. Use when they ask who is on my team, teammate names, or before looking up someone. Speak every name. One call. Then use show-employee-day with that name.",
+      description: usage(
+        "Names of people on your team.",
+        [
+          "CRITICAL: Call once when they ask who is on my team or teammate names.",
+          "MUST speak every name from content. Do not skip names or say check the board.",
+          "IMPORTANT: Also advertised as resource://teammates. Then use show_employee_day with that name.",
+          "No View. Voice and chat use the text result only.",
+        ]
+      ),
       inputSchema: dateInput,
       outputSchema: teammatesOutput,
-      view: {
-        name: "teammates",
-        description: "Teammate names on your team",
-        prefersBorder: false,
-        csp: viewCsp,
-      },
       annotations: { readOnlyHint: true, destructiveHint: false, openWorldHint: true },
     },
     async ({ date }, ctx) => {
@@ -754,20 +760,20 @@ export function registerAttendanceReadTools(server: MCPServer<FrappeUser> | MCPS
 
   const showManagementBoard = server.tool(
     {
-      name: "show-management-board",
+      name: "show_management_board",
       title: "Show management board",
-      description:
-        "HR company board. One call is enough — do not also call get-management-dashboard. Omit topics for the full board.",
+      description: usage(
+        "HR company attendance board: departments and hours rankings.",
+        [
+          "CRITICAL: Read content aloud. MUST NOT invent department names or hours.",
+          "MUST call once. Do not also call get_management_dashboard.",
+          "IMPORTANT: No View. Voice and chat use the text result only.",
+        ]
+      ),
       inputSchema: dateInput.extend({
         topics: managementTopics,
       }),
       outputSchema: managementOutput,
-      view: {
-        name: "management-board",
-        description: "Company attendance dashboard with charts",
-        prefersBorder: false,
-        csp: viewCsp,
-      },
       annotations: { readOnlyHint: true, destructiveHint: false, openWorldHint: true },
     },
     async ({ date }, ctx) => {
@@ -783,22 +789,23 @@ export function registerAttendanceReadTools(server: MCPServer<FrappeUser> | MCPS
 
   const showHistory = server.tool(
     {
-      name: "show-history",
+      name: "show_history",
       title: "Show history",
-      description:
-        "Your attendance for a day, week, or month in one call. Pass when= their words (this week, August, yesterday, 1 September). Trust returned weekday fields — never invent dates. One call — do not loop show-day. For a teammate use show-employee-history.",
+      description: usage(
+        "Your attendance for a day, week, or month in one call.",
+        [
+          "CRITICAL: Pass when= their date words unchanged. Trust returned weekdays. MUST NOT invent dates.",
+          "MUST call once. Do not loop show_day.",
+          "For a teammate use show_employee_history.",
+          "IMPORTANT: No View. Voice and chat use the text result only.",
+        ]
+      ),
       inputSchema: z.object({
         page: z.number().int().min(0).optional().describe("0-based page. Default 0. Ignored when a date filter is set."),
         ...dateFilterFields,
         topics: historyTopics,
       }),
       outputSchema: historyOutput,
-      view: {
-        name: "history",
-        description: "Personal attendance history and trends",
-        prefersBorder: false,
-        csp: viewCsp,
-      },
       annotations: { readOnlyHint: true, destructiveHint: false, openWorldHint: true },
     },
     async ({ page, when, date, month, period, from, to }, ctx) => {
@@ -818,22 +825,23 @@ export function registerAttendanceReadTools(server: MCPServer<FrappeUser> | MCPS
 
   const showDay = server.tool(
     {
-      name: "show-day",
+      name: "show_day",
       title: "Show day",
-      description:
-        "One personal date. Prefer when=yesterday or when='1 September' if they did not give ISO. For a week or month call show-history once. Never call this once per day. Export is export-history.",
+      description: usage(
+        "One personal date: hours, in/out, and tasks.",
+        [
+          "CRITICAL: Pass when= their words if they did not give ISO. Trust returned weekdays.",
+          "MUST NOT call this once per day to build a week or month — use show_history once.",
+          "Export is export_history.",
+          "IMPORTANT: No View. Voice and chat use the text result only.",
+        ]
+      ),
       inputSchema: z.object({
         date: z.string().optional().describe("YYYY-MM-DD if they gave ISO."),
         when: whenInput,
         topics: dayTopics,
       }),
       outputSchema: dayOutput,
-      view: {
-        name: "day",
-        description: "Single-day attendance and task charts",
-        prefersBorder: false,
-        csp: viewCsp,
-      },
       annotations: { readOnlyHint: true, destructiveHint: false, openWorldHint: true },
     },
     async ({ date, when }, ctx) => {
@@ -851,23 +859,25 @@ export function registerAttendanceReadTools(server: MCPServer<FrappeUser> | MCPS
 
   const showEmployeeDay = server.tool(
     {
-      name: "show-employee-day",
+      name: "show_employee_day",
       title: "Show employee day",
-      description:
-        "What a named teammate worked on for one day. Always call this — do not invent a permission error and do not use show-team-board. 'What did Maaz work on yesterday' → employeeName=Maaz, when=yesterday. For a week, month, or 'how many days did X attend': show-employee-history once.",
+      description: usage(
+        "What a named teammate worked on for one day.",
+        [
+          "CRITICAL: Always call this. MUST NOT invent a permission error. MUST NOT use show_team_board for one person.",
+          "MUST pass employeeName from resource://teammates or list_teammates, and when= their date words.",
+          "Example: what did Maaz work on yesterday → employeeName=Maaz, when=yesterday.",
+          "For a week, month, or how many days X attended: show_employee_history once.",
+          "IMPORTANT: No View. Read content aloud — name, weekday, hours, tasks.",
+        ]
+      ),
       inputSchema: z.object({
-        employeeName: z.string().describe("First name, full name, or Employee ID. Maaz → Maaz."),
+        employeeName: z.string().describe(EMPLOYEE_NAME_FIELD),
         date: z.string().optional().describe("YYYY-MM-DD if they gave ISO. Defaults to today."),
         when: whenInput,
         topics: dayTopics,
       }),
       outputSchema: employeeDayOutput,
-      view: {
-        name: "employee-day",
-        description: "Team member day attendance and task charts",
-        prefersBorder: false,
-        csp: viewCsp,
-      },
       annotations: { readOnlyHint: true, destructiveHint: false, openWorldHint: true },
     },
     async ({ employeeName, date, when }, ctx) => {
@@ -889,22 +899,24 @@ export function registerAttendanceReadTools(server: MCPServer<FrappeUser> | MCPS
 
   const showEmployeeHistory = server.tool(
     {
-      name: "show-employee-history",
+      name: "show_employee_history",
       title: "Show employee history",
-      description:
-        "One teammate's day, week, or month. Always call this for a named person — do not invent Team-Leader-only access and do not use show-team-board. 'How many days did Maaz attend this week' → employeeName=Maaz, when='this week'. Trust returned weekdays — never invent dates or loop show-employee-day.",
+      description: usage(
+        "One teammate's day, week, or month.",
+        [
+          "CRITICAL: Always call this for a named person. MUST NOT invent Team-Leader-only access. MUST NOT use show_team_board.",
+          "MUST pass employeeName from resource://teammates or list_teammates, and when= their date words.",
+          "Example: how many days did Maaz attend this week → employeeName=Maaz, when=this week.",
+          "MUST trust returned weekdays. MUST NOT invent dates or loop show_employee_day.",
+          "IMPORTANT: No View. Read content aloud.",
+        ]
+      ),
       inputSchema: z.object({
-        employeeName: z.string().describe("Teammate name or Employee ID. Maaz → Maaz."),
+        employeeName: z.string().describe(EMPLOYEE_NAME_FIELD),
         ...dateFilterFields,
         topics: historyTopics,
       }),
       outputSchema: employeeHistoryOutput,
-      view: {
-        name: "employee-history",
-        description: "Teammate attendance for a day, week, or month",
-        prefersBorder: false,
-        csp: viewCsp,
-      },
       annotations: { readOnlyHint: true, destructiveHint: false, openWorldHint: true },
     },
     async ({ employeeName, when, date, month, period, from, to }, ctx) => {
@@ -927,10 +939,15 @@ export function registerAttendanceReadTools(server: MCPServer<FrappeUser> | MCPS
 
   const showRecurring = server.tool(
     {
-      name: "show-recurring",
+      name: "show_recurring",
       title: "Show recurring tasks",
-      description:
-        "Recurring templates. One call is enough — do not also call list-recurring-tasks. Omit topics for the full UI.",
+      description: usage(
+        "Recurring task templates.",
+        [
+          "MUST call once. Do not also call list_recurring_tasks.",
+          "IMPORTANT: A View is OK here to edit templates.",
+        ]
+      ),
       inputSchema: z.object({
         topics: recurringTopics,
       }),
@@ -956,10 +973,15 @@ export function registerAttendanceReadTools(server: MCPServer<FrappeUser> | MCPS
 
   const showAdditionalWork = server.tool(
     {
-      name: "show-additional-work",
+      name: "show_additional_work",
       title: "Show additional work",
-      description:
-        "Additional work. One call is enough — do not also call list-additional-work. Omit topics for the full UI.",
+      description: usage(
+        "Additional work hours and entries.",
+        [
+          "MUST call once. Do not also call list_additional_work.",
+          "IMPORTANT: A View is OK here for the extra-hours form.",
+        ]
+      ),
       inputSchema: z.object({
         page: z.number().int().min(0).optional().describe("0-based page. Default 0."),
         topics: additionalTopics,
@@ -986,10 +1008,17 @@ export function registerAttendanceReadTools(server: MCPServer<FrappeUser> | MCPS
 
   const showProjects = server.tool(
     {
-      name: "show-projects",
+      name: "show_projects",
       title: "Show projects",
-      description:
-        "All known project names (today, planned, recurring, extra work). For today's projects only, show-today is enough. Do not also call list-projects. To create projects without checking in, call add-tasks — not this tool.",
+      description: usage(
+        "All known project names (today, planned, recurring, extra work).",
+        [
+          "MUST first consider resource://projects for today's names.",
+          "For today's projects only, show_today is enough. MUST NOT also call list_projects.",
+          "To create projects without checking in, MUST call add_tasks — not this tool.",
+          "IMPORTANT: A View is OK here to pick projects and add tasks.",
+        ]
+      ),
       inputSchema: z.object({
         topics: projectTopics,
       }),
@@ -1061,12 +1090,23 @@ export function registerAttendanceReadTools(server: MCPServer<FrappeUser> | MCPS
     const files = built.map(storeExportFile);
     const start = data.days[0]?.date;
     const end = data.days.at(-1)?.date;
+    const period =
+      filter.when?.trim() ||
+      (start && end && start === end
+        ? formatSpokenDate(start)
+        : start && end
+          ? `${formatSpokenDate(start)} to ${formatSpokenDate(end)}`
+          : "");
+    const formatLabel = wanted === "both" ? "PDF and Excel" : wanted === "xlsx" ? "Excel" : "PDF";
+    const spoken = period
+      ? `Exported ${period} for ${data.employeeName} as ${formatLabel}.`
+      : `Exported for ${data.employeeName} as ${formatLabel}.`;
     const scope = start && end ? (start === end ? ` for ${start}` : ` for ${start} to ${end}`) : "";
     return {
       content: [
         {
           type: "text" as const,
-          text: `Files are ready${scope}. ${files.map((file) => file.name).join(" and ")}.`,
+          text: spoken,
         },
         ...files.map((file) => ({
           type: "resource" as const,
@@ -1086,9 +1126,9 @@ export function registerAttendanceReadTools(server: MCPServer<FrappeUser> | MCPS
 
   const getExport = server.tool(
     {
-      name: "get-export",
+      name: "get_export",
       title: "Get export files",
-      description: "View helper: build Excel/PDF bytes. Models must use export-history instead.",
+      description: "View helper: build Excel/PDF bytes. Models MUST use export_history instead.",
       visibility: "app",
       inputSchema: exportInput,
       outputSchema: exportOutput,
@@ -1105,10 +1145,17 @@ export function registerAttendanceReadTools(server: MCPServer<FrappeUser> | MCPS
 
   const exportHistory = server.tool(
     {
-      name: "export-history",
+      name: "export_history",
       title: "Export PDF or Excel",
-      description:
-        "Download one PDF and/or one Excel for a day, week, or month. Prefer when= their words (August, this week, 18 August). Same filter for both formats. Call once. Do not export days separately. PDF → format=pdf. Excel → format=xlsx. Both → format=both. If they said export but not which days or which format, ask first.",
+      description: usage(
+        "Download one PDF and/or one Excel for a day, week, or month.",
+        [
+          "CRITICAL: Pass when= their date words unchanged. Call once. MUST NOT export days separately.",
+          "MUST set format=pdf for PDF, format=xlsx for Excel, format=both for both.",
+          "If they said export but not which days or which format, ask first.",
+          "IMPORTANT: No View. Speak the confirmation from content (who, period, format).",
+        ]
+      ),
       inputSchema: exportInput,
       outputSchema: exportOutput,
       annotations: { readOnlyHint: true, destructiveHint: false, openWorldHint: true },
