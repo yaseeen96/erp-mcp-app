@@ -16,7 +16,7 @@ import {
 const extraTopics = ["hours", "entries"] as const;
 
 export default function AdditionalWorkView() {
-  const view = useToolContext<"show_additional_work">();
+  const view = useToolContext<"view_additional_work">();
   const reload = useCallTool("list_additional_work");
   const save = useCallTool("save_additional_work");
   const remove = useCallTool("delete_additional_work");

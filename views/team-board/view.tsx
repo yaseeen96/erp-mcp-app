@@ -20,7 +20,7 @@ import {
 const teamTopics = ["presence", "hours", "people"] as const;
 
 export default function TeamBoardView() {
-  const view = useToolContext<"show_team_board">();
+  const view = useToolContext<"view_team_board">();
   const reload = useCallTool("get_team_dashboard");
   const employeeDay = useCallTool("get_employee_day");
   const [state, setState] = useViewState({

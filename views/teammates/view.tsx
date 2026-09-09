@@ -11,7 +11,7 @@ import {
 } from "../_shared/ui.js";
 
 export default function TeammatesView() {
-  const view = useToolContext<"list_teammates">();
+  const view = useToolContext<"view_teammates">();
   const reload = useCallTool("get_teammates");
   const output =
     reload.data?.structuredContent ?? (view.status === "ready" ? view.toolOutput : undefined);

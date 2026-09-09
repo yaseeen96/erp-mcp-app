@@ -6,7 +6,7 @@ import { AppShell, ErrorState, PendingState } from "../_shared/ui.js";
 const dayTopics = ["hours", "tasks"] as const;
 
 export default function EmployeeDayView() {
-  const view = useToolContext<"show_employee_day">();
+  const view = useToolContext<"view_employee_day">();
   const [state, setState] = useViewState({
     topics: view.toolInput?.topics ?? [],
   });

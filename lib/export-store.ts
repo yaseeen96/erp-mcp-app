@@ -8,7 +8,7 @@ type StoredExport = {
   expiresAt: number;
 };
 
-const TTL_MS = 10 * 60 * 1000;
+const TTL_MS = 2 * 60 * 60 * 1000;
 const files = new Map<string, StoredExport>();
 
 function prune() {

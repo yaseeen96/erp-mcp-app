@@ -19,7 +19,7 @@ import {
 const historyTopics = ["days", "hours", "tasks", "attendance"] as const;
 
 export default function HistoryView() {
-  const view = useToolContext<"show_history">();
+  const view = useToolContext<"view_history">();
   const historyTool = useCallTool("get_history");
   const [state, setState] = useViewState({
     page: view.toolInput?.page ?? 0,

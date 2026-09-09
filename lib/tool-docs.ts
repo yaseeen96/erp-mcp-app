@@ -12,3 +12,14 @@ export function usage(purpose: string, bullets: string[]) {
 ## Usage Requirements
 ${bullets.map((line) => `- ${line}`).join("\n")}`;
 }
+
+export const TEXT_ONLY =
+  "IMPORTANT: Text only — no dashboard. If they asked to see the view, charts, or dashboard, call the matching view_* tool instead.";
+
+export function viewOnly(purpose: string, textTool: string) {
+  return usage(purpose, [
+    "CRITICAL: Call ONLY when they asked to see the dashboard, charts, view, or visual UI.",
+    `MUST NOT call this in voice mode, or when they only asked a spoken fact — use ${textTool} instead.`,
+    "MUST NOT invent a Visualizer card. Speak content as well.",
+  ]);
+}

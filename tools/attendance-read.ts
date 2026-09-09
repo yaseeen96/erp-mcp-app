@@ -4,13 +4,13 @@ import * as attendance from "../lib/attendance.js";
 import { buildHistoryExcel, buildHistoryPdf } from "../lib/export-files.js";
 import { storeExportFile } from "../lib/export-store.js";
 import { formatSpokenDate, hasDateFilter, resolveSingleDate } from "../lib/calendar.js";
-import { loadEmployeeHistory, resolveEmployee } from "../lib/employee-range.js";
+import { loadEmployeeExport, loadEmployeeHistory, resolveEmployee } from "../lib/employee-range.js";
 import { loadHistoryExport, loadHistoryPage, loadHistoryRange } from "../lib/history-data.js";
 import { loadProjects } from "../lib/projects.js";
 import { resolveWorkLocationConfig } from "../lib/work-location.js";
 import { ok } from "../lib/result.js";
 import { attendanceDate, listDrafts, plannedSnapshot } from "../lib/task-drafts.js";
-import { EMPLOYEE_NAME_FIELD, WHEN_FIELD, usage } from "../lib/tool-docs.js";
+import { EMPLOYEE_NAME_FIELD, TEXT_ONLY, WHEN_FIELD, usage, viewOnly } from "../lib/tool-docs.js";
 import { frappeFailure } from "../lib/tool-utils.js";
 import type { AttendanceCtx, FrappeUser } from "../lib/types.js";
 import {
@@ -675,19 +675,13 @@ export function registerAttendanceReadTools(server: MCPServer<FrappeUser> | MCPS
           "CRITICAL: Call once when they ask about today or whether they are checked in.",
           "MUST NOT add tasks or check in. This is read-only.",
           "MUST NOT also call get_today or show_projects.",
-          "IMPORTANT: A View is OK here for the check-in / EOD form.",
+          TEXT_ONLY,
         ]
       ),
       inputSchema: z.object({
         topics: todayTopics,
       }),
       outputSchema: todayOutput,
-      view: {
-        name: "today",
-        description: "Daily check-in and end-of-day workspace",
-        prefersBorder: false,
-        csp: viewCsp,
-      },
       annotations: { readOnlyHint: true, destructiveHint: false, openWorldHint: true },
     },
     async (_args, ctx) => {
@@ -710,7 +704,7 @@ export function registerAttendanceReadTools(server: MCPServer<FrappeUser> | MCPS
           "MUST call this when they ask how the team is doing.",
           "MUST NOT use this for one named person — that is show_employee_day or show_employee_history.",
           "For names only, use list_teammates. MUST NOT also call get_team_dashboard.",
-          "IMPORTANT: No View. Voice and chat use the text result only.",
+          TEXT_ONLY,
         ]
       ),
       inputSchema: dateInput.extend({
@@ -740,7 +734,7 @@ export function registerAttendanceReadTools(server: MCPServer<FrappeUser> | MCPS
           "CRITICAL: Call once when they ask who is on my team or teammate names.",
           "MUST speak every name from content. Do not skip names or say check the board.",
           "IMPORTANT: Also advertised as resource://teammates. Then use show_employee_day with that name.",
-          "No View. Voice and chat use the text result only.",
+          TEXT_ONLY,
         ]
       ),
       inputSchema: dateInput,
@@ -767,7 +761,7 @@ export function registerAttendanceReadTools(server: MCPServer<FrappeUser> | MCPS
         [
           "CRITICAL: Read content aloud. MUST NOT invent department names or hours.",
           "MUST call once. Do not also call get_management_dashboard.",
-          "IMPORTANT: No View. Voice and chat use the text result only.",
+          TEXT_ONLY,
         ]
       ),
       inputSchema: dateInput.extend({
@@ -797,7 +791,7 @@ export function registerAttendanceReadTools(server: MCPServer<FrappeUser> | MCPS
           "CRITICAL: Pass when= their date words unchanged. Trust returned weekdays. MUST NOT invent dates.",
           "MUST call once. Do not loop show_day.",
           "For a teammate use show_employee_history.",
-          "IMPORTANT: No View. Voice and chat use the text result only.",
+          TEXT_ONLY,
         ]
       ),
       inputSchema: z.object({
@@ -833,7 +827,7 @@ export function registerAttendanceReadTools(server: MCPServer<FrappeUser> | MCPS
           "CRITICAL: Pass when= their words if they did not give ISO. Trust returned weekdays.",
           "MUST NOT call this once per day to build a week or month — use show_history once.",
           "Export is export_history.",
-          "IMPORTANT: No View. Voice and chat use the text result only.",
+          TEXT_ONLY,
         ]
       ),
       inputSchema: z.object({
@@ -868,7 +862,7 @@ export function registerAttendanceReadTools(server: MCPServer<FrappeUser> | MCPS
           "MUST pass employeeName from resource://teammates or list_teammates, and when= their date words.",
           "Example: what did Maaz work on yesterday → employeeName=Maaz, when=yesterday.",
           "For a week, month, or how many days X attended: show_employee_history once.",
-          "IMPORTANT: No View. Read content aloud — name, weekday, hours, tasks.",
+          TEXT_ONLY,
         ]
       ),
       inputSchema: z.object({
@@ -908,7 +902,7 @@ export function registerAttendanceReadTools(server: MCPServer<FrappeUser> | MCPS
           "MUST pass employeeName from resource://teammates or list_teammates, and when= their date words.",
           "Example: how many days did Maaz attend this week → employeeName=Maaz, when=this week.",
           "MUST trust returned weekdays. MUST NOT invent dates or loop show_employee_day.",
-          "IMPORTANT: No View. Read content aloud.",
+          TEXT_ONLY,
         ]
       ),
       inputSchema: z.object({
@@ -945,19 +939,13 @@ export function registerAttendanceReadTools(server: MCPServer<FrappeUser> | MCPS
         "Recurring task templates.",
         [
           "MUST call once. Do not also call list_recurring_tasks.",
-          "IMPORTANT: A View is OK here to edit templates.",
+          TEXT_ONLY,
         ]
       ),
       inputSchema: z.object({
         topics: recurringTopics,
       }),
       outputSchema: recurringOutput,
-      view: {
-        name: "recurring",
-        description: "Recurring task templates",
-        prefersBorder: false,
-        csp: viewCsp,
-      },
       annotations: { readOnlyHint: true, destructiveHint: false, openWorldHint: true },
     },
     async (_args, ctx) => {
@@ -979,7 +967,7 @@ export function registerAttendanceReadTools(server: MCPServer<FrappeUser> | MCPS
         "Additional work hours and entries.",
         [
           "MUST call once. Do not also call list_additional_work.",
-          "IMPORTANT: A View is OK here for the extra-hours form.",
+          TEXT_ONLY,
         ]
       ),
       inputSchema: z.object({
@@ -987,12 +975,6 @@ export function registerAttendanceReadTools(server: MCPServer<FrappeUser> | MCPS
         topics: additionalTopics,
       }),
       outputSchema: additionalOutput,
-      view: {
-        name: "additional-work",
-        description: "Additional work hours and entries",
-        prefersBorder: false,
-        csp: viewCsp,
-      },
       annotations: { readOnlyHint: true, destructiveHint: false, openWorldHint: true },
     },
     async ({ page }, ctx) => {
@@ -1016,19 +998,13 @@ export function registerAttendanceReadTools(server: MCPServer<FrappeUser> | MCPS
           "MUST first consider resource://projects for today's names.",
           "For today's projects only, show_today is enough. MUST NOT also call list_projects.",
           "To create projects without checking in, MUST call add_tasks — not this tool.",
-          "IMPORTANT: A View is OK here to pick projects and add tasks.",
+          TEXT_ONLY,
         ]
       ),
       inputSchema: z.object({
         topics: projectTopics,
       }),
       outputSchema: projectOutput,
-      view: {
-        name: "projects",
-        description: "Projects and their tasks",
-        prefersBorder: false,
-        csp: viewCsp,
-      },
       annotations: { readOnlyHint: true, destructiveHint: false, openWorldHint: true },
     },
     async (_args, ctx) => {
@@ -1042,6 +1018,12 @@ export function registerAttendanceReadTools(server: MCPServer<FrappeUser> | MCPS
   );
 
   const exportInput = z.object({
+    employeeName: z
+      .string()
+      .optional()
+      .describe(
+        `${EMPLOYEE_NAME_FIELD} Omit to export the signed-in user's own history. MUST pass a teammate name when they asked to export that person.`
+      ),
     ...dateFilterFields,
     format: z
       .enum(["xlsx", "pdf", "both"])
@@ -1072,6 +1054,7 @@ export function registerAttendanceReadTools(server: MCPServer<FrappeUser> | MCPS
     topics: Array<"days" | "hours" | "tasks" | "attendance"> | undefined,
     page: number | undefined,
     filter: {
+      employeeName?: string;
       when?: string;
       date?: string;
       month?: string;
@@ -1081,7 +1064,10 @@ export function registerAttendanceReadTools(server: MCPServer<FrappeUser> | MCPS
     },
     ctx: unknown
   ) {
-    const data = await loadHistoryExport(ctx as AttendanceCtx, { page, ...filter });
+    const wantedName = filter.employeeName?.trim();
+    const data = wantedName
+      ? await loadEmployeeExport(ctx as AttendanceCtx, { ...filter, employeeName: wantedName })
+      : await loadHistoryExport(ctx as AttendanceCtx, { page, ...filter });
     const wanted = format ?? "pdf";
     const built = await Promise.all([
       ...(wanted === "pdf" ? [] : [buildHistoryExcel(data.employeeName, data.days, topics)]),
@@ -1098,9 +1084,15 @@ export function registerAttendanceReadTools(server: MCPServer<FrappeUser> | MCPS
           ? `${formatSpokenDate(start)} to ${formatSpokenDate(end)}`
           : "");
     const formatLabel = wanted === "both" ? "PDF and Excel" : wanted === "xlsx" ? "Excel" : "PDF";
-    const spoken = period
-      ? `Exported ${period} for ${data.employeeName} as ${formatLabel}.`
-      : `Exported for ${data.employeeName} as ${formatLabel}.`;
+    const links = files.map((file) => file.url).join(" ");
+    const spoken = [
+      period
+        ? `Exported ${period} for ${data.employeeName} as ${formatLabel}.`
+        : `Exported for ${data.employeeName} as ${formatLabel}.`,
+      links
+        ? `Download here (opens for 2 hours): ${links}`
+        : "The file was built, but no download link is available.",
+    ].join(" ");
     const scope = start && end ? (start === end ? ` for ${start}` : ` for ${start} to ${end}`) : "";
     return {
       content: [
@@ -1134,9 +1126,15 @@ export function registerAttendanceReadTools(server: MCPServer<FrappeUser> | MCPS
       outputSchema: exportOutput,
       annotations: { readOnlyHint: true, destructiveHint: false, openWorldHint: true },
     },
-    async ({ format, topics, page, when, date, month, period, from, to }, ctx) => {
+    async ({ employeeName, format, topics, page, when, date, month, period, from, to }, ctx) => {
       try {
-        return await runExport(format, topics, page, { when, date, month, period, from, to }, ctx);
+        return await runExport(
+          format,
+          topics,
+          page,
+          { employeeName, when, date, month, period, from, to },
+          ctx
+        );
       } catch (error) {
         return frappeFailure(error);
       }
@@ -1148,21 +1146,321 @@ export function registerAttendanceReadTools(server: MCPServer<FrappeUser> | MCPS
       name: "export_history",
       title: "Export PDF or Excel",
       description: usage(
-        "Download one PDF and/or one Excel for a day, week, or month.",
+        "Download one PDF and/or one Excel for you or a teammate, for a day, week, or month.",
         [
           "CRITICAL: Pass when= their date words unchanged. Call once. MUST NOT export days separately.",
+          "MUST pass employeeName when they asked to export a teammate. Omit employeeName for the signed-in user.",
           "MUST set format=pdf for PDF, format=xlsx for Excel, format=both for both.",
+          "CRITICAL: Paste the download URL from content into the reply. Hosts cannot attach the PDF blob. MUST give them the link.",
           "If they said export but not which days or which format, ask first.",
-          "IMPORTANT: No View. Speak the confirmation from content (who, period, format).",
+          TEXT_ONLY,
         ]
       ),
       inputSchema: exportInput,
       outputSchema: exportOutput,
       annotations: { readOnlyHint: true, destructiveHint: false, openWorldHint: true },
     },
-    async ({ format, topics, page, when, date, month, period, from, to }, ctx) => {
+    async ({ employeeName, format, topics, page, when, date, month, period, from, to }, ctx) => {
       try {
-        return await runExport(format, topics, page, { when, date, month, period, from, to }, ctx);
+        return await runExport(
+          format,
+          topics,
+          page,
+          { employeeName, when, date, month, period, from, to },
+          ctx
+        );
+      } catch (error) {
+        return frappeFailure(error);
+      }
+    }
+  );
+
+  const viewToday = server.tool(
+    {
+      name: "view_today",
+      title: "View today workspace",
+      description: viewOnly("Today's check-in / EOD workspace with charts.", "show_today"),
+      inputSchema: z.object({ topics: todayTopics }),
+      outputSchema: todayOutput,
+      view: { name: "today", description: "Daily check-in and end-of-day workspace", prefersBorder: false, csp: viewCsp },
+      annotations: { readOnlyHint: true, destructiveHint: false, openWorldHint: true },
+    },
+    async (_args, ctx) => {
+      try {
+        return await loadToday(ctx as AttendanceCtx);
+      } catch (error) {
+        return frappeFailure(error);
+      }
+    }
+  );
+
+  const viewTeamBoard = server.tool(
+    {
+      name: "view_team_board",
+      title: "View team board",
+      description: viewOnly("Team roster dashboard with charts.", "show_team_board"),
+      inputSchema: dateInput.extend({ topics: teamTopics }),
+      outputSchema: teamOutput,
+      view: { name: "team-board", description: "Team attendance board with charts", prefersBorder: false, csp: viewCsp },
+      annotations: { readOnlyHint: true, destructiveHint: false, openWorldHint: true },
+    },
+    async ({ date }, ctx) => {
+      try {
+        const board = await attendance.getTeamDashboard(ctx as AttendanceCtx, date);
+        const data = summarizeTeam(board);
+        return ok(data.summary, data, { board });
+      } catch (error) {
+        return frappeFailure(error);
+      }
+    }
+  );
+
+  const viewTeammates = server.tool(
+    {
+      name: "view_teammates",
+      title: "View teammates",
+      description: viewOnly("Teammate names as a visual list.", "list_teammates"),
+      inputSchema: dateInput,
+      outputSchema: teammatesOutput,
+      view: { name: "teammates", description: "Teammate names on your team", prefersBorder: false, csp: viewCsp },
+      annotations: { readOnlyHint: true, destructiveHint: false, openWorldHint: true },
+    },
+    async ({ date }, ctx) => {
+      try {
+        const board = await attendance.getTeamDashboard(ctx as AttendanceCtx, date);
+        const data = summarizeTeammates(board);
+        return ok(data.summary, data);
+      } catch (error) {
+        return frappeFailure(error);
+      }
+    }
+  );
+
+  const viewManagementBoard = server.tool(
+    {
+      name: "view_management_board",
+      title: "View management board",
+      description: viewOnly("HR company dashboard with charts.", "show_management_board"),
+      inputSchema: dateInput.extend({ topics: managementTopics }),
+      outputSchema: managementOutput,
+      view: { name: "management-board", description: "Company attendance dashboard with charts", prefersBorder: false, csp: viewCsp },
+      annotations: { readOnlyHint: true, destructiveHint: false, openWorldHint: true },
+    },
+    async ({ date }, ctx) => {
+      try {
+        const board = await attendance.getManagementDashboard(ctx as AttendanceCtx, date);
+        const data = summarizeManagement(board);
+        return ok(data.summary, data, { board });
+      } catch (error) {
+        return frappeFailure(error);
+      }
+    }
+  );
+
+  const viewHistory = server.tool(
+    {
+      name: "view_history",
+      title: "View history",
+      description: viewOnly("Your attendance history with charts.", "show_history"),
+      inputSchema: z.object({
+        page: z.number().int().min(0).optional().describe("0-based page. Default 0. Ignored when a date filter is set."),
+        ...dateFilterFields,
+        topics: historyTopics,
+      }),
+      outputSchema: historyOutput,
+      view: { name: "history", description: "Personal attendance history and trends", prefersBorder: false, csp: viewCsp },
+      annotations: { readOnlyHint: true, destructiveHint: false, openWorldHint: true },
+    },
+    async ({ page, when, date, month, period, from, to }, ctx) => {
+      try {
+        const filter = { when, date, month, period, from, to };
+        if (hasDateFilter(filter)) {
+          const { data } = await loadHistoryRange(ctx as AttendanceCtx, filter);
+          return ok(data.summary, data);
+        }
+        const { history, data } = await loadHistoryPage(ctx as AttendanceCtx, page ?? 0);
+        return ok(data.summary, data, { history });
+      } catch (error) {
+        return frappeFailure(error);
+      }
+    }
+  );
+
+  const viewDay = server.tool(
+    {
+      name: "view_day",
+      title: "View day",
+      description: viewOnly("One personal day with charts.", "show_day"),
+      inputSchema: z.object({
+        date: z.string().optional().describe("YYYY-MM-DD if they gave ISO."),
+        when: whenInput,
+        topics: dayTopics,
+      }),
+      outputSchema: dayOutput,
+      view: { name: "day", description: "Single-day attendance and task charts", prefersBorder: false, csp: viewCsp },
+      annotations: { readOnlyHint: true, destructiveHint: false, openWorldHint: true },
+    },
+    async ({ date, when }, ctx) => {
+      try {
+        const resolved = resolveSingleDate({ date, when });
+        const detail = await attendance.getHistoryDayDetail(ctx as AttendanceCtx, resolved);
+        const auth = (ctx as AttendanceCtx).auth?.user;
+        const data = summarizeDay(detail, auth?.fullName || auth?.email || auth?.id || "Employee");
+        return ok(data.summary, data, { detail });
+      } catch (error) {
+        return frappeFailure(error);
+      }
+    }
+  );
+
+  const viewEmployeeDay = server.tool(
+    {
+      name: "view_employee_day",
+      title: "View employee day",
+      description: viewOnly("One teammate's day with charts.", "show_employee_day"),
+      inputSchema: z.object({
+        employeeName: z.string().describe(EMPLOYEE_NAME_FIELD),
+        date: z.string().optional().describe("YYYY-MM-DD if they gave ISO. Defaults to today."),
+        when: whenInput,
+        topics: dayTopics,
+      }),
+      outputSchema: employeeDayOutput,
+      view: { name: "employee-day", description: "Team member day attendance and task charts", prefersBorder: false, csp: viewCsp },
+      annotations: { readOnlyHint: true, destructiveHint: false, openWorldHint: true },
+    },
+    async ({ employeeName, date, when }, ctx) => {
+      try {
+        const employee = await resolveEmployee(ctx as AttendanceCtx, employeeName);
+        const resolved = date || when ? resolveSingleDate({ date, when }) : undefined;
+        const detail = await attendance.getEmployeeTaskDetail(
+          ctx as AttendanceCtx,
+          employee.employeeId,
+          resolved
+        );
+        const data = summarizeEmployeeDay(detail, employee.name);
+        return ok(data.summary, data, { detail });
+      } catch (error) {
+        return frappeFailure(error);
+      }
+    }
+  );
+
+  const viewEmployeeHistory = server.tool(
+    {
+      name: "view_employee_history",
+      title: "View employee history",
+      description: viewOnly("One teammate's week or month with charts.", "show_employee_history"),
+      inputSchema: z.object({
+        employeeName: z.string().describe(EMPLOYEE_NAME_FIELD),
+        ...dateFilterFields,
+        topics: historyTopics,
+      }),
+      outputSchema: employeeHistoryOutput,
+      view: { name: "employee-history", description: "Teammate attendance for a day, week, or month", prefersBorder: false, csp: viewCsp },
+      annotations: { readOnlyHint: true, destructiveHint: false, openWorldHint: true },
+    },
+    async ({ employeeName, when, date, month, period, from, to }, ctx) => {
+      try {
+        const data = await loadEmployeeHistory(ctx as AttendanceCtx, {
+          employeeName,
+          when,
+          date,
+          month,
+          period,
+          from,
+          to,
+        });
+        return ok(data.summary, data);
+      } catch (error) {
+        return frappeFailure(error);
+      }
+    }
+  );
+
+  const viewRecurring = server.tool(
+    {
+      name: "view_recurring",
+      title: "View recurring tasks",
+      description: viewOnly("Recurring templates workspace.", "show_recurring"),
+      inputSchema: z.object({ topics: recurringTopics }),
+      outputSchema: recurringOutput,
+      view: { name: "recurring", description: "Recurring task templates", prefersBorder: false, csp: viewCsp },
+      annotations: { readOnlyHint: true, destructiveHint: false, openWorldHint: true },
+    },
+    async (_args, ctx) => {
+      try {
+        const rows = await attendance.getRecurringTasks(ctx as AttendanceCtx);
+        const data = summarizeRecurring(rows);
+        return ok(data.summary, data, { rows });
+      } catch (error) {
+        return frappeFailure(error);
+      }
+    }
+  );
+
+  const viewAdditionalWork = server.tool(
+    {
+      name: "view_additional_work",
+      title: "View additional work",
+      description: viewOnly("Additional work form and charts.", "show_additional_work"),
+      inputSchema: z.object({
+        page: z.number().int().min(0).optional().describe("0-based page. Default 0."),
+        topics: additionalTopics,
+      }),
+      outputSchema: additionalOutput,
+      view: { name: "additional-work", description: "Additional work hours and entries", prefersBorder: false, csp: viewCsp },
+      annotations: { readOnlyHint: true, destructiveHint: false, openWorldHint: true },
+    },
+    async ({ page }, ctx) => {
+      try {
+        const result = await attendance.getAdditionalWork(ctx as AttendanceCtx, page ?? 0);
+        const data = summarizeAdditional(result);
+        return ok(data.summary, data, { result });
+      } catch (error) {
+        return frappeFailure(error);
+      }
+    }
+  );
+
+  const viewProjects = server.tool(
+    {
+      name: "view_projects",
+      title: "View projects",
+      description: viewOnly("Projects workspace to pick projects and add tasks.", "show_projects"),
+      inputSchema: z.object({ topics: projectTopics }),
+      outputSchema: projectOutput,
+      view: { name: "projects", description: "Projects and their tasks", prefersBorder: false, csp: viewCsp },
+      annotations: { readOnlyHint: true, destructiveHint: false, openWorldHint: true },
+    },
+    async (_args, ctx) => {
+      try {
+        const { page, data } = await loadProjects(ctx as AttendanceCtx);
+        return ok(data.summary, data, { page });
+      } catch (error) {
+        return frappeFailure(error);
+      }
+    }
+  );
+
+  const viewExport = server.tool(
+    {
+      name: "view_export",
+      title: "View export download",
+      description: viewOnly("Download card for the exported PDF or Excel.", "export_history"),
+      inputSchema: exportInput,
+      outputSchema: exportOutput,
+      view: { name: "export", description: "Download the exported PDF or Excel", prefersBorder: false, csp: viewCsp },
+      annotations: { readOnlyHint: true, destructiveHint: false, openWorldHint: true },
+    },
+    async ({ employeeName, format, topics, page, when, date, month, period, from, to }, ctx) => {
+      try {
+        return await runExport(
+          format,
+          topics,
+          page,
+          { employeeName, when, date, month, period, from, to },
+          ctx
+        );
       } catch (error) {
         return frappeFailure(error);
       }
@@ -1194,5 +1492,17 @@ export function registerAttendanceReadTools(server: MCPServer<FrappeUser> | MCPS
     showRecurring,
     showAdditionalWork,
     showProjects,
+    viewToday,
+    viewTeamBoard,
+    viewTeammates,
+    viewManagementBoard,
+    viewHistory,
+    viewDay,
+    viewEmployeeDay,
+    viewEmployeeHistory,
+    viewRecurring,
+    viewAdditionalWork,
+    viewProjects,
+    viewExport,
   };
 }

@@ -19,7 +19,7 @@ import {
 const managementTopics = ["status", "departments", "rankings"] as const;
 
 export default function ManagementBoardView() {
-  const view = useToolContext<"show_management_board">();
+  const view = useToolContext<"view_management_board">();
   const reload = useCallTool("get_management_dashboard");
   const employeeDay = useCallTool("get_employee_day");
   const seriesColors = useBrandSeriesColors();

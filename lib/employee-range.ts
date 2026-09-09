@@ -8,6 +8,7 @@ import {
   weekdayShort,
   type DateFilter,
 } from "./calendar.js";
+import type { HistoryExportDay } from "./export-files.js";
 import { FrappeRequestError } from "./frappe-client.js";
 import {
   asArray,
@@ -237,5 +238,24 @@ export async function loadEmployeeHistory(ctx: AttendanceCtx, args: EmployeeRang
       done: rows.map((row) => row.done),
       total: rows.map((row) => row.total),
     },
+  };
+}
+
+export async function loadEmployeeExport(
+  ctx: AttendanceCtx,
+  args: EmployeeRangeArgs
+): Promise<{ employeeName: string; days: HistoryExportDay[] }> {
+  const data = await loadEmployeeHistory(ctx, args);
+  return {
+    employeeName: data.employeeName,
+    days: data.days.map((row) => ({
+      date: row.date,
+      hours: row.hours,
+      login: row.login,
+      logout: row.logout,
+      done: row.done,
+      total: row.total,
+      tasks: row.tasks,
+    })),
   };
 }

@@ -25,7 +25,7 @@ import {
 const projectTopics = ["list", "tasks"] as const;
 
 export default function ProjectsView() {
-  const view = useToolContext<"show_projects">();
+  const view = useToolContext<"view_projects">();
   const reload = useCallTool("list_projects");
   const addTasks = useCallTool("add_tasks");
   const [state, setState] = useViewState({ topics: view.toolInput?.topics ?? [] });

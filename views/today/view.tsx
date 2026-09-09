@@ -34,7 +34,7 @@ import {
 const todayTopics = ["hours", "tasks"] as const;
 
 export default function TodayView() {
-  const view = useToolContext<"show_today">();
+  const view = useToolContext<"view_today">();
   const checkIn = useCallTool("check_in");
   const checkOut = useCallTool("check_out");
   const reset = useCallTool("reset_checkin");

@@ -8,15 +8,16 @@ description: Route precise attendance asks to one tool. If intent is vague, ask 
 Before any tool call, check whether the request is specified enough to act.
 
 CRITICAL: Pass `when` as their date words. MUST NOT compute ISO dates or weekdays yourself.
-CRITICAL: Read tool `content` aloud. MUST NOT invent names, weekdays, or hours from a View.
-
-Views exist only on `show_today`, `show_recurring`, `show_additional_work`, and `show_projects`.
+CRITICAL: Read tool `content` aloud. MUST NOT invent names, weekdays, or hours.
+CRITICAL: Voice and spoken facts use `show_*` / `list_teammates` / `export_history` — no dashboard.
+Call a `view_*` tool ONLY when they asked to see the dashboard, charts, view, or visual UI.
+MUST NOT invent a Visualizer card.
 
 ## Precise — call one tool
 
 | They said | Call | Arguments |
 | --- | --- | --- |
-| export / PDF / Excel **and** a day, week, or month | `export_history` | `when=…`, `format=pdf` or `xlsx` |
+| export / PDF / Excel **and** a day, week, or month | `export_history` | `when=…`, `format=pdf` or `xlsx`, `employeeName` if a teammate |
 | show / see that one day (me) | `show_day` | `when=…` |
 | today / am I in | `show_today` | — |
 | my week / month / how many days I attended | `show_history` | `when=this week` or `when=August` |
@@ -24,6 +25,7 @@ Views exist only on `show_today`, `show_recurring`, `show_additional_work`, and 
 | what did X work on / one teammate one day | `show_employee_day` | name, `when=…` |
 | who is on my team / teammate names | `list_teammates` | — |
 | how is my team doing / who is in / late / missing | `show_team_board` | optional `date` |
+| show me the dashboard / charts / view | matching `view_*` | same args as the text tool |
 | check in / punch in | `check_in` | — |
 | check out / finish day | `check_out` | — |
 | plan / add tasks, no check-in | `add_tasks` | projects and tasks |
@@ -64,7 +66,11 @@ Never invent “restricted to Team Leaders or HR”. Call the teammate tool. If 
 
 `export_history` `{ "when": "August", "format": "xlsx" }`
 
-One file per format. Do not export days separately or merge. Never also call `show_day`.
+“export Maaz last week as PDF”
+
+`export_history` `{ "employeeName": "Maaz", "when": "last week", "format": "pdf" }`
+
+One file per format. Do not export days separately or merge. Never also call `show_day`. After the tool returns, paste the download URL from `content`. Do not say the file cannot be delivered.
 
 ## Vague — ask, do not call
 

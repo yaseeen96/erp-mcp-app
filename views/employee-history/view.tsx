@@ -27,7 +27,7 @@ function statusLabel(status: string) {
 }
 
 export default function EmployeeHistoryView() {
-  const view = useToolContext<"show_employee_history">();
+  const view = useToolContext<"view_employee_history">();
   const reload = useCallTool("get_employee_history");
   const [state, setState] = useViewState({
     employeeName: view.toolInput?.employeeName ?? "",
