@@ -5,18 +5,27 @@
     "node": ">=22.22.2"
   },
   "version": "1.6.0",
-  "description": "Per-user ERPNext ST Attendance MCP App with report and chart views",
-  "author": "mcp-use",
+  "description": "Per-user ERPNext ST Attendance MCP App — check-in, team board, and dashboards for Claude, ChatGPT, Cursor, and more",
+  "author": "Standard Touch",
   "license": "MIT",
-  "homepage": "https://github.com/mcp-use/mcp-use",
+  "homepage": "https://attendance.mcp.standardtouch.com/mcp",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/yaseeen96/erp-mcp-app.git"
+  },
+  "bugs": {
+    "url": "https://github.com/yaseeen96/erp-mcp-app/issues"
+  },
   "keywords": [
     "mcp",
     "mcp-server",
+    "erpnext",
+    "frappe",
+    "attendance",
     "chatgpt plugins",
     "claude connector",
     "mcp-app",
-    "mcp-use",
-    "manufact"
+    "mcp-use"
   ],
   "scripts": {
     "build": "mcp-use build",

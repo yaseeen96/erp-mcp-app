@@ -1,33 +1,119 @@
-# ST Attendance MCP App
+# ST Attendance MCP
 
-Per-user MCP App for [ST Attendance Tracker](https://st-erpv15.frappe.cloud/) on ERPNext v15. Employees sign in on the Frappe login page with **Google** or **email and password**. Tools call `st_attendance_tracker.api` as that user.
+Per-user [Model Context Protocol](https://modelcontextprotocol.io/) server for **ST Attendance Tracker** on [ERPNext](https://frappe.io/erpnext) v15. Connect Claude, ChatGPT, Cursor, VS Code, or other MCP clients, sign in with Google or email/password on Frappe, and ask about attendance, teammates, and check-in/out — with optional interactive dashboards.
 
-**1.5.0 is a breaking rename.** Reconnect ChatGPT, Claude, Cursor, and other hosts after upgrade. Tool names are now `snake_case` (`show_today`, `list_teammates`, `check_in`). **1.6.0** keeps `show_*` voice-safe (text only). Dashboards open only from `view_*` when you ask to see the view.
+## Live deployment
 
-## Run locally
+| | |
+| --- | --- |
+| **MCP endpoint** | https://attendance.mcp.standardtouch.com/mcp |
+| **Install / landing page** | https://attendance.mcp.standardtouch.com/mcp |
+| **ERPNext** | https://st-erpv15.frappe.cloud/ |
+
+Open the MCP URL in a browser for the **Installation Guide** (Claude, Cursor, VS Code, ChatGPT, Antigravity).
+
+### Quick connect (hosted)
+
+**Claude Desktop / claude.ai** — Settings → Customize → Connectors → Add custom connector → name it `Attendance MCP` → paste:
+
+```text
+https://attendance.mcp.standardtouch.com/mcp
+```
+
+**Claude Code**
 
 ```bash
+claude mcp add --transport http st_attendance https://attendance.mcp.standardtouch.com/mcp
+```
+
+Then run `/mcp` and sign in when Frappe asks.
+
+**Cursor / VS Code** — use the client tabs on the landing page, or add an HTTP MCP server pointed at the same URL and complete OAuth.
+
+## What you can do
+
+- Ask how the team is doing (`show_team_board`) or who is on your team (`list_teammates`)
+- Check in / check out with planned work (`check_in`, `check_out`)
+- Add tasks without punching in (`add_tasks`)
+- Open chart dashboards only when you ask to *see* the view (`view_*` tools)
+- Export history to PDF/Excel (`export_history`)
+
+Voice-safe `show_*` tools return spoken text only. `view_*` tools open MCP App UIs.
+
+## Repository layout
+
+```text
+erp-mcp-app/
+├── index.ts          # MCP server entry (tools, auth, landing)
+├── lib/              # Frappe client, OAuth, env, landing rewrites
+├── tools/            # MCP tool registrations (read / write)
+├── views/            # MCP App React views (dashboards)
+├── prompts/          # MCP prompts
+├── skills/           # Skills over MCP
+├── public/           # Static assets (favicon, etc.)
+├── scripts/          # Helpers (e.g. OAuth checks)
+└── .env.example      # Required environment variables
+```
+
+## Local setup
+
+**Requirements:** Node.js ≥ 22.22.2
+
+```bash
+git clone https://github.com/yaseeen96/erp-mcp-app.git
+cd erp-mcp-app
 cp .env.example .env
-# Set FRAPPE_OAUTH_CLIENT_ID and FRAPPE_OAUTH_CLIENT_SECRET
+```
+
+Edit `.env`:
+
+- `ERPNEXT_URL` — your ERPNext site (default in example)
+- `FRAPPE_OAUTH_CLIENT_ID` / `FRAPPE_OAUTH_CLIENT_SECRET` — from Desk → OAuth Client **ST Attendance MCP**
+- `MCP_PUBLIC_URL` — `http://localhost:3000` for local; production uses `https://attendance.mcp.standardtouch.com`
+
+```bash
 npm install
 npm run dev
 ```
 
-Open [http://localhost:3000/mcp/inspector](http://localhost:3000/mcp/inspector). Connect `http://localhost:3000/mcp`, then Authenticate.
+Inspector: [http://localhost:3000/mcp/inspector](http://localhost:3000/mcp/inspector)  
+Connect to `http://localhost:3000/mcp`, then Authenticate.
 
-Desk → OAuth Client **ST Attendance MCP**. Redirect URIs and scopes must each be on **one line**, space-separated (newlines do not match):
+### Frappe OAuth Client
 
-`http://localhost:3000/mcp/inspector/oauth/callback https://attendance.mcp.standardtouch.com/mcp/inspector/oauth/callback https://inspector.manufact.com/inspector/oauth/callback https://chatgpt.com/connector/oauth/nCDGjbkwhCLX https://claude.ai/api/mcp/auth_callback https://claude.com/api/mcp/auth_callback https://antigravity.google/oauth-callback https://www.cursor.com/agents/mcp/oauth/callback http://localhost:8787/callback http://127.0.0.1:8787/callback cursor://anysphere.cursor-mcp/oauth/callback https://vscode.dev/redirect https://insiders.vscode.dev/redirect http://127.0.0.1:33418 http://127.0.0.1:33418/ http://localhost:33418 http://localhost:33418/`
+On the OAuth Client, **Redirect URIs** and **Scopes** must each be on **one line** (space-separated). Newlines do not match.
 
-Default Redirect URI (separate field, one URL): `https://attendance.mcp.standardtouch.com/mcp/inspector/oauth/callback`
+Include at least:
 
-Scopes: `all openid`
+- Local: `http://localhost:3000/mcp/inspector/oauth/callback`
+- Hosted: `https://attendance.mcp.standardtouch.com/mcp/inspector/oauth/callback`
+- Plus callbacks for Claude, ChatGPT, Cursor, VS Code, Antigravity, and the hosted Inspector (see `.env.example` for the full list)
 
-## Tools and Views
+**Default Redirect URI** (separate field):  
+`https://attendance.mcp.standardtouch.com/mcp/inspector/oauth/callback`
 
-Ask/report `show_*` tools return a **spoken script** in `content` (every name, weekday, hours, tasks). They do **not** open a dashboard — that keeps voice mode clean.
+**Scopes:** `all openid`
 
-Call a `view_*` tool only when you ask to see the dashboard, charts, or view.
+## Scripts
+
+| Command | Purpose |
+| --- | --- |
+| `npm run dev` | Local server + hot reload |
+| `npm run typecheck` | Typecheck |
+| `npm run build` | Production build |
+| `npm run start` | Run built server |
+| `npm run deploy` | Deploy with mcp-use |
+| `npm run check:oauth` | Sanity-check OAuth config |
+
+```bash
+npm run typecheck
+npm run build
+npm run deploy -- --name st-attendance --env-file .env
+```
+
+After deploy, set `MCP_PUBLIC_URL` to the public origin (**no** trailing slash). Pass secrets with `--env` / `--env-file`, or `mcp-use servers env add`. Do not commit `.env`.
+
+## Tools overview
 
 | Ask (text / voice) | See the UI |
 | --- | --- |
@@ -46,25 +132,19 @@ Call a `view_*` tool only when you ask to see the dashboard, charts, or view.
 
 Resources: `resource://teammates`, `resource://projects`.
 
-Writes: `add_tasks` saves projects and tasks without punching in. `check_in` starts the day and sends planned work. `check_out` finishes the day. Destructive tools need `confirm=true`.
+Writes: `add_tasks`, `check_in`, `check_out`. Destructive tools require `confirm=true`.
 
-## Deploy
+### Breaking changes
 
-```bash
-npm run typecheck
-npm run build
-npm run deploy -- --name st-attendance --env-file .env
-```
+- **1.5.0** — tool names became `snake_case`. Reconnect clients after upgrade.
+- **1.6.0** — `show_*` stays voice-safe (text only); use `view_*` for dashboards.
 
-After the cloud URL is known, set `MCP_PUBLIC_URL` to that origin (no trailing slash). The hosted Inspector (`Open in Inspector`) uses `https://inspector.manufact.com/inspector/oauth/callback` — that URI must also be on the Frappe OAuth Client.
+## Stack
 
-Pass secrets with `--env` / `--env-file`, or `mcp-use servers env add KEY=VALUE --server <id> --sensitive`. Do not commit `.env`.
+- [mcp-use](https://github.com/mcp-use/mcp-use) — MCP server + Apps
+- Frappe / ERPNext OAuth (per-user API calls)
+- React views for interactive boards
 
-## Scripts
+## License
 
-```bash
-npm run typecheck
-npm run build
-npm run start
-npm run deploy
-```
+MIT
